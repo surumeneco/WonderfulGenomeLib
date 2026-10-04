@@ -38,22 +38,20 @@ final class GenomeSynthesizer {
             }
 
             boolean unsatisfiable = false;
+            Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans = new TreeMap<>();
             for (var e : new TreeMap<>(target.continuousTargets()).entrySet()) {
                 GenomeAddress address = e.getKey();
                 double targetScore = e.getValue();
-                if (targetScore == 0.0) continue;
-
-                double cancellationDraw = context.cancellationMin()
-                        + (context.cancellationMax() - context.cancellationMin()) * random.nextDouble();
-                double cancellation = Math.min(cancellationDraw, Math.max(0.0, 0.98 - targetScore));
-                double negativeSurvival = 1.0 - cancellation;
-                double positiveTarget = targetScore / negativeSurvival;
+                SynthesisAddressPlan synthesisPlan = Objects.requireNonNull(
+                        profile.synthesisPlan(address, targetScore, context, random),
+                        "profile synthesisPlan returned null");
+                synthesisPlans.put(address, synthesisPlan);
 
                 DirectContributionModel model = profile.contributionModel(address);
-                GenePlan positive = bestPlan(model, address, positiveTarget,
-                        context.minPositiveGenes(), context.maxPositiveGenes());
-                GenePlan negative = cancellation <= 0.0 ? GenePlan.empty()
-                        : bestPlan(model, address, cancellation, 1, Math.max(1, context.maxPositiveGenes() / 2));
+                GenePlan positive = bestPlan(model, address, synthesisPlan.positiveSaturation(),
+                        synthesisPlan.minPositiveGenes(), synthesisPlan.maxPositiveGenes());
+                GenePlan negative = bestPlan(model, address, synthesisPlan.negativeSaturation(),
+                        synthesisPlan.minNegativeGenes(), synthesisPlan.maxNegativeGenes());
                 if (positive == null || negative == null) {
                     unsatisfiable = true;
                     break;
@@ -102,7 +100,7 @@ final class GenomeSynthesizer {
             }
 
             SynthesisResult.Success adjusted = locallyAdjust(
-                    profile, backbone, target, a, b, decoded, random);
+                    profile, backbone, target, synthesisPlans, a, b, decoded, random);
             if (adjusted != null) return adjusted;
         }
         return new SynthesisResult.Failure(SynthesisFailureReason.CONVERGENCE_LIMIT,
@@ -112,6 +110,7 @@ final class GenomeSynthesizer {
     private SynthesisResult.Success locallyAdjust(GenomeProfile<?> profile,
                                                         BackboneDefinition backbone,
                                                         SynthesisTarget target,
+                                                        Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans,
                                                         List<MutableScaffold> a,
                                                         List<MutableScaffold> b,
                                                         DecodeResult<?> initial,
@@ -126,25 +125,37 @@ final class GenomeSynthesizer {
                 return new SynthesisResult.Success(genome, decoded);
             }
 
-            Residual residual = largestResidual(target, decoded.decodedGenome(), tolerance);
+            Residual residual = largestResidual(synthesisPlans, decoded.decodedGenome(), tolerance);
             if (residual == null) break;
 
             GenomeAddress address = residual.address();
             AddressAggregate aggregate = decoded.decodedGenome().aggregate(address);
-            boolean negative = residual.targetScore() < aggregate.score();
-            double baseAmount = Math.max(residual.targetScore(), aggregate.score());
+            boolean negative = residual.negative();
+            double currentSaturation = negative
+                    ? 1.0 - aggregate.negativeSurvival()
+                    : aggregate.positiveSaturation();
+            if (residual.targetSaturation() <= currentSaturation) break;
+
+            double baseAmount = Math.max(residual.targetSaturation(), currentSaturation);
             double stepLimit = baseAmount * maxRatio;
             if (!(stepLimit > 0.0)) stepLimit = Math.min(residual.absoluteError(), tolerance);
             double desiredDelta = Math.min(residual.absoluteError(), stepLimit);
-            double desiredScore = negative
-                    ? aggregate.score() - desiredDelta
-                    : aggregate.score() + desiredDelta;
+            double desiredSaturation = currentSaturation + desiredDelta;
 
             DirectContributionModel model = profile.contributionModel(address);
-            int magnitude = bestAdjustmentMagnitude(model, address, aggregate, desiredScore, negative);
+            int magnitude = bestAdjustmentMagnitude(model, address, currentSaturation, desiredSaturation);
             if (magnitude <= 0) break;
 
-            BitSequence gene = GeneCodecV1.encode(address, negative, magnitude, 15, BitSequence.empty());
+            BitSequence extension = Objects.requireNonNull(
+                    profile.synthesisExtension(address, target, random),
+                    "profile synthesisExtension returned null");
+            int minimumExtension = profile.minimumExtensionBits(address);
+            if (minimumExtension < 0 || minimumExtension > 64
+                    || extension.bitLength() < minimumExtension || extension.bitLength() > 64) {
+                throw new IllegalStateException("invalid synthesis extension length for " + address
+                        + ": " + extension.bitLength() + " bits, minimum=" + minimumExtension);
+            }
+            BitSequence gene = GeneCodecV1.encode(address, negative, magnitude, 15, extension);
             BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
             int chromosome = weightedChromosome(backbone, random);
             MutableScaffold scaffold = random.nextBoolean() ? a.get(chromosome) : b.get(chromosome);
@@ -153,8 +164,8 @@ final class GenomeSynthesizer {
             DiploidGenome genome = currentGenome(backbone, a, b);
             if (!safeDiploid(backbone, genome)) break;
             DecodeResult<?> next = decoder.decode(profile, genome);
-            double nextError = totalError(target, next.decodedGenome());
-            double currentError = totalError(target, decoded.decodedGenome());
+            double nextError = totalError(synthesisPlans, next.decodedGenome());
+            double currentError = totalError(synthesisPlans, decoded.decodedGenome());
             if (!(nextError < currentError)) break;
             decoded = next;
         }
@@ -176,46 +187,48 @@ final class GenomeSynthesizer {
         return new DiploidGenome(backbone.genomeFormatVersion(), pairs);
     }
 
-    private static Residual largestResidual(SynthesisTarget target, DecodedGenome decoded, double tolerance) {
+    private static Residual largestResidual(Map<GenomeAddress, SynthesisAddressPlan> plans,
+                                            DecodedGenome decoded, double tolerance) {
         Residual best = null;
-        for (var entry : new TreeMap<>(target.continuousTargets()).entrySet()) {
-            double current = decoded.aggregate(entry.getKey()).score();
-            double error = StrictMath.abs(entry.getValue() - current);
-            if (error <= tolerance) continue;
-            if (best == null || error > best.absoluteError()) {
-                best = new Residual(entry.getKey(), entry.getValue(), error);
+        for (var entry : plans.entrySet()) {
+            AddressAggregate aggregate = decoded.aggregate(entry.getKey());
+            SynthesisAddressPlan plan = entry.getValue();
+
+            double positiveError = StrictMath.abs(plan.positiveSaturation() - aggregate.positiveSaturation());
+            if (positiveError > tolerance && (best == null || positiveError > best.absoluteError())) {
+                best = new Residual(entry.getKey(), false, plan.positiveSaturation(), positiveError);
+            }
+
+            double negative = 1.0 - aggregate.negativeSurvival();
+            double negativeError = StrictMath.abs(plan.negativeSaturation() - negative);
+            if (negativeError > tolerance && (best == null || negativeError > best.absoluteError())) {
+                best = new Residual(entry.getKey(), true, plan.negativeSaturation(), negativeError);
             }
         }
         return best;
     }
 
-    private static double totalError(SynthesisTarget target, DecodedGenome decoded) {
+    private static double totalError(Map<GenomeAddress, SynthesisAddressPlan> plans, DecodedGenome decoded) {
         double total = 0.0;
-        for (var entry : target.continuousTargets().entrySet()) {
-            total += StrictMath.abs(entry.getValue() - decoded.aggregate(entry.getKey()).score());
+        for (var entry : plans.entrySet()) {
+            AddressAggregate aggregate = decoded.aggregate(entry.getKey());
+            total += StrictMath.abs(entry.getValue().positiveSaturation() - aggregate.positiveSaturation());
+            total += StrictMath.abs(entry.getValue().negativeSaturation()
+                    - (1.0 - aggregate.negativeSurvival()));
         }
         return total;
     }
 
     private static int bestAdjustmentMagnitude(DirectContributionModel model,
                                                GenomeAddress address,
-                                               AddressAggregate aggregate,
-                                               double desiredScore,
-                                               boolean negative) {
+                                               double currentSaturation,
+                                               double desiredSaturation) {
         int bestMagnitude = 0;
-        double bestError = StrictMath.abs(aggregate.score() - desiredScore);
+        double bestError = StrictMath.abs(currentSaturation - desiredSaturation);
         for (int magnitude = 1; magnitude <= 127; magnitude++) {
             double candidateU = u(model, address, magnitude);
-            double predicted;
-            if (negative) {
-                predicted = aggregate.positiveSaturation()
-                        * aggregate.negativeSurvival() * (1.0 - candidateU);
-            } else {
-                double positive = 1.0
-                        - (1.0 - aggregate.positiveSaturation()) * (1.0 - candidateU);
-                predicted = positive * aggregate.negativeSurvival();
-            }
-            double error = StrictMath.abs(predicted - desiredScore);
+            double predicted = 1.0 - (1.0 - currentSaturation) * (1.0 - candidateU);
+            double error = StrictMath.abs(predicted - desiredSaturation);
             if (error < bestError) {
                 bestError = error;
                 bestMagnitude = magnitude;
@@ -224,7 +237,8 @@ final class GenomeSynthesizer {
         return bestMagnitude;
     }
 
-    private record Residual(GenomeAddress address, double targetScore, double absoluteError) {}
+    private record Residual(GenomeAddress address, boolean negative,
+                            double targetSaturation, double absoluteError) {}
 
     private static GenePlan bestPlan(DirectContributionModel model, GenomeAddress address, double target,
                                      int minCount, int maxCount) {
