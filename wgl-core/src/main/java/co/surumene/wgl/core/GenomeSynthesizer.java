@@ -258,10 +258,10 @@ final class GenomeSynthesizer {
         GenePlan best = null;
         for (int count = minCount; count <= maxCount; count++) {
             for (int commonMagnitude = 0; commonMagnitude <= 127; commonMagnitude++) {
-                double commonU = u(model, address, commonMagnitude);
+                double commonU = u(model, address, negative, commonMagnitude);
                 double commonSurvival = StrictMath.pow(1.0 - commonU, Math.max(0, count - 1));
                 for (int tailMagnitude = 0; tailMagnitude <= 127; tailMagnitude++) {
-                    double tailU = u(model, address, tailMagnitude);
+                    double tailU = u(model, address, negative, tailMagnitude);
                     double achieved = 1.0 - commonSurvival * (1.0 - tailU);
                     double error = StrictMath.abs(achieved - target);
                     if (best == null || error < best.error()) {
