@@ -190,6 +190,32 @@ final class GenomeSynthesizer {
                 ? new SynthesisResult.Success(genome, finalDecoded) : null;
     }
 
+    private static void placeProfileBlocks(GenomeProfile<?> profile,
+                                           BackboneDefinition backbone,
+                                           SynthesisTarget target,
+                                           SynthesisContext context,
+                                           List<MutableScaffold> a,
+                                           List<MutableScaffold> b,
+                                           GenomeRandom random) {
+        List<SynthesisBlock> blocks = List.copyOf(Objects.requireNonNull(
+                profile.synthesisBlocks(target, context, random),
+                "profile synthesisBlocks returned null"));
+        for (SynthesisBlock block : blocks) {
+            Objects.requireNonNull(block, "profile synthesisBlocks contains null");
+            int chromosome = block.chromosomeIndex() == SynthesisBlock.RANDOM
+                    ? weightedChromosome(backbone, random)
+                    : block.chromosomeIndex();
+            if (chromosome >= backbone.chromosomes().size()) {
+                throw new IllegalStateException("profile synthesis block chromosome outside backbone: " + chromosome);
+            }
+            int haplotype = block.haplotypeIndex() == SynthesisBlock.RANDOM
+                    ? (random.nextBoolean() ? 0 : 1)
+                    : block.haplotypeIndex();
+            MutableScaffold scaffold = haplotype == 0 ? a.get(chromosome) : b.get(chromosome);
+            scaffold.insertAtSafeBoundary(block.bits(), random);
+        }
+    }
+
     private static DiploidGenome currentGenome(BackboneDefinition backbone,
                                                List<MutableScaffold> a,
                                                List<MutableScaffold> b) {
