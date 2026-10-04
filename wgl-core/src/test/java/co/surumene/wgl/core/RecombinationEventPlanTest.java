@@ -32,4 +32,16 @@ class RecombinationEventPlanTest {
 
         assertEquals(List.of(nahr), plan.boundaries());
     }
+    @Test
+    void nahrDoesNotConsumeTheMandatoryNormalCrossoverEvent() {
+        EngineConfig config = EngineConfig.defaults();
+
+        int normalCount = RecombinationEventPlan.normalCrossoverTargetCount(
+                4096.0,
+                config.recombination(),
+                new SplitMix64GenomeRandom(123L));
+
+        assertEquals(1, normalCount);
+    }
+
 }
