@@ -27,6 +27,28 @@ class ChromosomeTemplateValidationTest {
     }
 
     @Test
+    void markerLocusMustUseBackboneAnchors() {
+        BitSequence bits = BitSequence.fromBits("0101".repeat(128));
+        AnchorSeed first = new AnchorSeed(64, bits.slice(64, 112));
+        AnchorSeed second = new AnchorSeed(192, bits.slice(192, 240));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new ChromosomeTemplate(bits, List.of(first), new MarkerLocus(first, second)));
+    }
+
+    @Test
+    void markerLocusMustUseAdjacentBackboneAnchors() {
+        BitSequence bits = BitSequence.fromBits("0011".repeat(128));
+        AnchorSeed first = new AnchorSeed(64, bits.slice(64, 112));
+        AnchorSeed middle = new AnchorSeed(128, bits.slice(128, 176));
+        AnchorSeed second = new AnchorSeed(192, bits.slice(192, 240));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new ChromosomeTemplate(bits, List.of(first, middle, second),
+                        new MarkerLocus(first, second)));
+    }
+
+    @Test
     void matchingSeedsRemainValid() {
         BitSequence bits = BitSequence.fromBits("0110".repeat(96));
         AnchorSeed first = new AnchorSeed(64, bits.slice(64, 112));
