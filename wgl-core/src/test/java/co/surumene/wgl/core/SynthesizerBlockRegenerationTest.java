@@ -72,4 +72,75 @@ class SynthesizerBlockRegenerationTest {
         assertEquals(0.5, success.decoded().decodedGenome().aggregate(address).score(),
                 config.synthesizer().convergenceTolerance());
     }
+
+    @Test
+    void regeneratingOneAddressPreservesOtherAddressAndProfileBlocks() {
+        GenomeAddress stable = new GenomeAddress(0x00, 0x01);
+        GenomeAddress problematic = new GenomeAddress(0x00, 0x02);
+        GenomeAddress latent = new GenomeAddress(0x04, 0x01);
+        java.util.concurrent.atomic.AtomicInteger problematicPlans = new java.util.concurrent.atomic.AtomicInteger();
+
+        GenomeProfile<Double> profile = new GenomeProfile<>() {
+            @Override public ProfileDescriptor descriptor() {
+                return new ProfileDescriptor("regen-isolation", 1, new byte[32]);
+            }
+            @Override public boolean isDefinedAddress(GenomeAddress candidate) {
+                return stable.equals(candidate) || problematic.equals(candidate) || latent.equals(candidate);
+            }
+            @Override public DirectContributionModel contributionModel(GenomeAddress candidate) {
+                return StandardDirectContributionModel.defaultModel();
+            }
+            @Override public SynthesisAddressPlan synthesisPlan(
+                    GenomeAddress candidate, double target,
+                    SynthesisContext context, GenomeRandom random) {
+                if (problematic.equals(candidate) && problematicPlans.getAndIncrement() == 0) {
+                    return new SynthesisAddressPlan(1.0, 0.5, 2, 2, 2, 2);
+                }
+                return new SynthesisAddressPlan(target, 0.0, 2, 2, 0, 0);
+            }
+            @Override public java.util.List<SynthesisBlock> synthesisBlocks(
+                    SynthesisTarget target, SynthesisContext context, GenomeRandom random) {
+                return java.util.List.of(SynthesisBlock.fixed(
+                        GeneCodecV1.encode(latent, false, 127, 15, BitSequence.empty()), 0, 0));
+            }
+            @Override public Double mapPhenotype(DecodedGenome decodedGenome) {
+                return decodedGenome.aggregate(stable).score()
+                        + decodedGenome.aggregate(problematic).score()
+                        + decodedGenome.aggregate(latent).score();
+            }
+        };
+
+        SynthesisTarget target = new SynthesisTarget() {
+            @Override public Map<GenomeAddress, Double> continuousTargets() {
+                return Map.of(stable, 0.30, problematic, 0.50);
+            }
+            @Override public boolean isSatisfied(DecodedGenome decoded, double tolerance) {
+                return StrictMath.abs(decoded.aggregate(stable).score() - 0.30) <= tolerance
+                        && StrictMath.abs(decoded.aggregate(problematic).score() - 0.50) <= tolerance
+                        && decoded.aggregate(latent).score() >= 0.29;
+            }
+        };
+
+        EngineConfig defaults = EngineConfig.defaults();
+        EngineConfig config = new EngineConfig(
+                defaults.homology(), defaults.recombination(), defaults.mutation(),
+                defaults.regulation(), defaults.localRates(),
+                new EngineConfig.Synthesizer(
+                        defaults.synthesizer().convergenceTolerance(),
+                        1,
+                        defaults.synthesizer().microCorrectionMaxRatio()),
+                defaults.eventRetryMax());
+
+        SynthesisResult.Success success = assertInstanceOf(SynthesisResult.Success.class,
+                WonderfulGenomeEngine.create(config).synthesize(
+                        profile, TestBackbones.singlePair(2048), target,
+                        new SynthesisContext(2, 2, 0.0, 0.0, 1),
+                        new SplitMix64GenomeRandom(20261004L)));
+
+        DecodedGenome decoded = success.decoded().decodedGenome();
+        assertEquals(0.30, decoded.aggregate(stable).score(), config.synthesizer().convergenceTolerance());
+        assertEquals(0.50, decoded.aggregate(problematic).score(), config.synthesizer().convergenceTolerance());
+        assertTrue(decoded.aggregate(latent).score() >= 0.29);
+        assertEquals(2, problematicPlans.get());
+    }
 }
