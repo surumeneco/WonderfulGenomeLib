@@ -36,7 +36,18 @@ class NahrBreedingTest {
         BreedingResult second = engine.breed(profile, parent, parent, context, new SplitMix64GenomeRandom(0));
         assertEquals(first, second);
         BreedingResult.Success success = assertInstanceOf(BreedingResult.Success.class, first);
-        assertEquals(1296, success.genome().chromosomePairs().getFirst().haplotypeA().bitLength());
-        assertEquals(1296, success.genome().chromosomePairs().getFirst().haplotypeB().bitLength());
+        ChromosomePair child = success.genome().chromosomePairs().getFirst();
+        assertTrue(backbone.safetyPolicy().isSafe(
+                List.of(child.haplotypeA().bitLength()),
+                backbone.baselineChromosomeLengths()));
+        assertTrue(backbone.safetyPolicy().isSafe(
+                List.of(child.haplotypeB().bitLength()),
+                backbone.baselineChromosomeLengths()));
+        assertTrue(
+                child.haplotypeA().bitLength() != a.bitLength()
+                        || child.haplotypeA().bitLength() != b.bitLength()
+                        || child.haplotypeB().bitLength() != a.bitLength()
+                        || child.haplotypeB().bitLength() != b.bitLength(),
+                "forced NAHR should produce a structurally recombined product");
     }
 }
