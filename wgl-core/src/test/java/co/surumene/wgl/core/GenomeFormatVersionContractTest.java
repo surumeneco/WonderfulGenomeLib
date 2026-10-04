@@ -22,6 +22,9 @@ class GenomeFormatVersionContractTest {
         WonderfulGenomeEngine engine = WonderfulGenomeEngine.create(EngineConfig.defaults());
 
         assertThrows(IllegalArgumentException.class, () -> engine.decode(profile, v2Genome));
+        assertThrows(IllegalArgumentException.class, () -> engine.encode(v2Genome));
+        assertThrows(IllegalArgumentException.class,
+                () -> engine.assessCompatibility(v2Genome, v2Genome, null));
         assertThrows(IllegalArgumentException.class, () -> engine.marker(v1, v2Genome));
     }
 
