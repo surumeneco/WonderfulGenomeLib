@@ -218,9 +218,9 @@ final class BreedingEngine {
         switch (nahr.kind()) {
             case HOMOLOG_UNEQUAL -> {
                 PairSnapshot pair = pairs.get(nahr.chromosomeA());
-                TrackedSequence product = random.nextBoolean()
-                        ? pair.a().slice(0, nahr.positionA()).concat(pair.b().slice(nahr.positionB(), pair.b().bitLength()))
-                        : pair.b().slice(0, nahr.positionB()).concat(pair.a().slice(nahr.positionA(), pair.a().bitLength()));
+                TrackedSequence product = recombineWithNahr(pair, nahr.chromosomeA(),
+                        nahr.positionA(), nahr.positionB(), meiosisPolicy, random);
+                if (product == null) return null;
                 result.set(nahr.chromosomeA(), product);
             }
             case INTRACHROM_DELETION -> {
@@ -299,6 +299,42 @@ final class BreedingEngine {
         TrackedSequence preferred = buildRecombinant(pair, selected, startA);
         if (hardConstraintsSatisfied(preferred, chromosome, constraints)) return preferred;
         TrackedSequence opposite = buildRecombinant(pair, selected, !startA);
+        return hardConstraintsSatisfied(opposite, chromosome, constraints) ? opposite : null;
+    }
+
+    private TrackedSequence recombineWithNahr(PairSnapshot pair, int chromosome,
+                                                   int nahrA, int nahrB,
+                                                   ParentMeiosisPolicy meiosisPolicy,
+                                                   GenomeRandom random) {
+        List<InheritanceConstraint> constraints = constraintsFor(meiosisPolicy, chromosome);
+        HomologyMap map = homology.analyze(pair.a().bits(), pair.b().bits());
+
+        double meanLength = (pair.a().bitLength() + pair.b().bitLength()) / 2.0;
+        double lambda = Math.max(0.0,
+                (meanLength - config.recombination().extraCrossoverStartBits())
+                        / config.recombination().extraCrossoverScaleBits());
+        int totalEventCount = 1 + Sampling.poisson(lambda, random);
+        int normalCount = Math.max(0, totalEventCount - 1);
+
+        List<CrossCandidate> normal = normalCount == 0 || map.blocks().isEmpty()
+                ? List.of()
+                : selectCrosses(buildCrossCandidates(pair, map.blocks(), constraints), normalCount, random);
+
+        List<RecombinationEventPlan.Boundary> normalBoundaries = normal.stream()
+                .map(x -> new RecombinationEventPlan.Boundary(x.a(), x.b(), false))
+                .toList();
+        RecombinationEventPlan plan = RecombinationEventPlan.withNahr(
+                new RecombinationEventPlan.Boundary(nahrA, nahrB, true), normalBoundaries);
+
+        List<CrossCandidate> combined = plan.boundaries().stream()
+                .map(x -> new CrossCandidate(x.a(), x.b(), 1.0))
+                .sorted(Comparator.comparingInt(CrossCandidate::a).thenComparingInt(CrossCandidate::b))
+                .toList();
+
+        boolean startA = chooseStartingHaplotype(combined, constraints, random);
+        TrackedSequence preferred = buildRecombinant(pair, combined, startA);
+        if (hardConstraintsSatisfied(preferred, chromosome, constraints)) return preferred;
+        TrackedSequence opposite = buildRecombinant(pair, combined, !startA);
         return hardConstraintsSatisfied(opposite, chromosome, constraints) ? opposite : null;
     }
 
@@ -532,86 +568,80 @@ final class BreedingEngine {
 
     private void applyStructuralMutations(List<TrackedSequence> gamete, BreedingContext context,
                                           ProvenanceGuard guard, GenomeRandom random) {
-        List<TrackedSequence> snapshot = List.copyOf(gamete);
-        List<StructuralMutationBatch.Edit> planned = new ArrayList<>();
+        StructuralMutationStage stage = new StructuralMutationStage(gamete);
         EngineConfig.Structural s = config.mutation().structural();
 
-        maybeStructural(StructuralType.INSERTION, s.insertionProbability(), snapshot, planned, context, guard, random);
-        maybeStructural(StructuralType.DELETION, s.deletionProbability(), snapshot, planned, context, guard, random);
-        maybeStructural(StructuralType.DUPLICATION, s.duplicationProbability(), snapshot, planned, context, guard, random);
-        maybeStructural(StructuralType.INVERSION, s.inversionProbability(), snapshot, planned, context, guard, random);
-        maybeStructural(StructuralType.TRANSLOCATION, s.translocationProbability(), snapshot, planned, context, guard, random);
+        stage = maybeStructural(StructuralType.INSERTION, s.insertionProbability(), stage, context, guard, random);
+        stage = maybeStructural(StructuralType.DELETION, s.deletionProbability(), stage, context, guard, random);
+        stage = maybeStructural(StructuralType.DUPLICATION, s.duplicationProbability(), stage, context, guard, random);
+        stage = maybeStructural(StructuralType.INVERSION, s.inversionProbability(), stage, context, guard, random);
+        stage = maybeStructural(StructuralType.TRANSLOCATION, s.translocationProbability(), stage, context, guard, random);
 
-        if (!planned.isEmpty()) {
-            List<TrackedSequence> applied = StructuralMutationBatch.apply(snapshot, planned);
-            gamete.clear();
-            gamete.addAll(applied);
-        }
+        List<TrackedSequence> materialized = stage.materialize();
+        gamete.clear();
+        gamete.addAll(materialized);
     }
 
-    private void maybeStructural(StructuralType type, double baseProbability,
-                                 List<TrackedSequence> snapshot,
-                                 List<StructuralMutationBatch.Edit> planned,
-                                 BreedingContext context, ProvenanceGuard guard, GenomeRandom random) {
+    private StructuralMutationStage maybeStructural(StructuralType type, double baseProbability,
+                                                    StructuralMutationStage accepted,
+                                                    BreedingContext context, ProvenanceGuard guard,
+                                                    GenomeRandom random) {
         double probability = clamp(baseProbability * context.mutationRateMultiplier(), 0.0, 1.0);
-        if (random.nextDouble() >= probability) return;
+        if (random.nextDouble() >= probability) return accepted;
+
         for (int attempt = 0; attempt < config.eventRetryMax(); attempt++) {
-            List<StructuralMutationBatch.Edit> event = planStructural(type, snapshot, random);
-            if (event == null || event.isEmpty() || StructuralMutationBatch.conflicts(planned, event)) continue;
-            List<StructuralMutationBatch.Edit> combined = new ArrayList<>(planned.size() + event.size());
-            combined.addAll(planned);
-            combined.addAll(event);
-            List<TrackedSequence> candidate = StructuralMutationBatch.apply(snapshot, combined);
-            if (!guard.valid(candidate)) continue;
-            if (!context.allowSafetyOverride() && !safeHaploid(context.backbone(), candidate)) continue;
-            planned.addAll(event);
-            return;
+            StructuralMutationStage candidate = accepted.copy();
+            if (!planStructural(type, candidate, random)) continue;
+            List<TrackedSequence> materialized = candidate.materialize();
+            if (!guard.valid(materialized)) continue;
+            if (!context.allowSafetyOverride() && !safeHaploid(context.backbone(), materialized)) continue;
+            return candidate;
         }
         // Retry exhaustion cancels only this event.
+        return accepted;
     }
 
-    private List<StructuralMutationBatch.Edit> planStructural(StructuralType type,
-                                                               List<TrackedSequence> snapshot, GenomeRandom random) {
+    private boolean planStructural(StructuralType type, StructuralMutationStage stage, GenomeRandom random) {
         EngineConfig.Structural s = config.mutation().structural();
         return switch (type) {
-            case INSERTION -> planInsertion(snapshot, s, random);
-            case DELETION -> planDeletion(snapshot, s, random);
-            case DUPLICATION -> planDuplication(snapshot, s, random);
-            case INVERSION -> planInversion(snapshot, s, random);
-            case TRANSLOCATION -> planTranslocation(snapshot, s, random);
+            case INSERTION -> insertion(stage, s, random);
+            case DELETION -> deletion(stage, s, random);
+            case DUPLICATION -> duplication(stage, s, random);
+            case INVERSION -> inversion(stage, s, random);
+            case TRANSLOCATION -> translocation(stage, s, random);
         };
     }
 
-    private List<StructuralMutationBatch.Edit> planInsertion(List<TrackedSequence> snapshot,
-                                                              EngineConfig.Structural s, GenomeRandom random) {
+    private boolean insertion(StructuralMutationStage stage, EngineConfig.Structural s, GenomeRandom random) {
+        List<TrackedSequence> snapshot = stage.snapshot();
         Boundary target = chooseBoundary(snapshot, random, -1);
-        if (target == null) return null;
+        if (target == null) return false;
         int length = Sampling.truncatedGeometric(s.insertionLengthP(), s.insertionLengthMaxBits(), random);
         TrackedSequence inserted;
         if (random.nextDouble() < s.insertionRandomSequenceRatio()) {
             inserted = TrackedSequence.fresh(randomBits(length, random));
         } else {
             SourceInterval source = chooseSourceInterval(snapshot, length, random);
-            inserted = source == null ? TrackedSequence.fresh(randomBits(length, random))
+            inserted = source == null
+                    ? TrackedSequence.fresh(randomBits(length, random))
                     : snapshot.get(source.chromosome()).slice(source.start(), source.end());
         }
-        return List.of(new StructuralMutationBatch.Insert(target.chromosome(), target.position(), inserted));
+        return stage.insert(target.chromosome(), target.position(), inserted);
     }
 
-    private List<StructuralMutationBatch.Edit> planDeletion(List<TrackedSequence> snapshot,
-                                                             EngineConfig.Structural s, GenomeRandom random) {
+    private boolean deletion(StructuralMutationStage stage, EngineConfig.Structural s, GenomeRandom random) {
+        List<TrackedSequence> snapshot = stage.snapshot();
         int length = Sampling.truncatedGeometric(s.deletionLengthP(), s.deletionLengthMaxBits(), random);
         SourceInterval source = chooseSourceInterval(snapshot, length, random);
-        return source == null ? null : List.of(
-                new StructuralMutationBatch.Remove(source.chromosome(), source.start(), source.end()));
+        return source != null && stage.delete(source.chromosome(), source.start(), source.end());
     }
 
-    private List<StructuralMutationBatch.Edit> planDuplication(List<TrackedSequence> snapshot,
-                                                                EngineConfig.Structural s, GenomeRandom random) {
+    private boolean duplication(StructuralMutationStage stage, EngineConfig.Structural s, GenomeRandom random) {
+        List<TrackedSequence> snapshot = stage.snapshot();
         int length = Sampling.truncatedGeometric(s.duplicationLengthP(), s.duplicationLengthMaxBits(), random);
         SourceInterval source = chooseSourceInterval(snapshot, length, random);
-        if (source == null) return null;
-        TrackedSequence piece = snapshot.get(source.chromosome()).slice(source.start(), source.end());
+        if (source == null) return false;
+
         int targetChromosome;
         int targetPosition;
         if (random.nextDouble() < s.duplicationSameChromosomeRatio() || snapshot.size() == 1) {
@@ -619,60 +649,53 @@ final class BreedingEngine {
             targetPosition = source.end();
         } else {
             Boundary target = chooseBoundary(snapshot, random, source.chromosome());
-            if (target == null) return null;
+            if (target == null) return false;
             targetChromosome = target.chromosome();
             targetPosition = target.position();
         }
-        return List.of(new StructuralMutationBatch.Insert(targetChromosome, targetPosition, piece));
+        return stage.duplicate(source.chromosome(), source.start(), source.end(),
+                targetChromosome, targetPosition);
     }
 
-    private List<StructuralMutationBatch.Edit> planInversion(List<TrackedSequence> snapshot,
-                                                              EngineConfig.Structural s, GenomeRandom random) {
+    private boolean inversion(StructuralMutationStage stage, EngineConfig.Structural s, GenomeRandom random) {
+        List<TrackedSequence> snapshot = stage.snapshot();
         int length = Sampling.truncatedGeometric(s.inversionLengthP(), s.inversionLengthMaxBits(), random);
         SourceInterval source = chooseSourceInterval(snapshot, length, random);
-        if (source == null) return null;
-        TrackedSequence reversed = snapshot.get(source.chromosome()).slice(source.start(), source.end()).reverse();
-        return List.of(new StructuralMutationBatch.Replace(source.chromosome(), source.start(), source.end(), reversed));
+        return source != null && stage.invert(source.chromosome(), source.start(), source.end());
     }
 
-    private List<StructuralMutationBatch.Edit> planTranslocation(List<TrackedSequence> snapshot,
-                                                                  EngineConfig.Structural s, GenomeRandom random) {
-        if (snapshot.isEmpty()) return null;
+    private boolean translocation(StructuralMutationStage stage, EngineConfig.Structural s, GenomeRandom random) {
+        List<TrackedSequence> snapshot = stage.snapshot();
+        if (snapshot.isEmpty()) return false;
+
         if (snapshot.size() > 1 && random.nextDouble() < s.translocationReciprocalRatio()) {
             Boundary first = chooseBoundary(snapshot, random, -1);
-            if (first == null) return null;
+            if (first == null) return false;
             Boundary second = chooseBoundary(snapshot, random, first.chromosome());
-            if (second == null) return null;
-            TrackedSequence a = snapshot.get(first.chromosome());
-            TrackedSequence b = snapshot.get(second.chromosome());
-            return List.of(
-                    new StructuralMutationBatch.Replace(first.chromosome(), first.position(), a.bitLength(),
-                            b.slice(second.position(), b.bitLength())),
-                    new StructuralMutationBatch.Replace(second.chromosome(), second.position(), b.bitLength(),
-                            a.slice(first.position(), a.bitLength())));
+            return second != null && stage.reciprocalTailSwap(first.chromosome(), first.position(),
+                    second.chromosome(), second.position());
         }
+
         int length = Sampling.truncatedGeometric(s.translocationLengthP(), s.translocationLengthMaxBits(), random);
         SourceInterval source = chooseSourceInterval(snapshot, length, random);
-        if (source == null) return null;
-        TrackedSequence piece = snapshot.get(source.chromosome()).slice(source.start(), source.end());
+        if (source == null) return false;
+
         int targetChromosome = source.chromosome();
         if (snapshot.size() > 1 && random.nextDouble() < s.translocationOtherChromosomeRatio()) {
             int pick = random.nextInt(snapshot.size() - 1);
             targetChromosome = pick >= source.chromosome() ? pick + 1 : pick;
         }
         Boundary target = chooseBoundaryForChromosome(snapshot, targetChromosome, random);
-        if (target == null) return null;
-        List<StructuralMutationBatch.Edit> event = List.of(
-                new StructuralMutationBatch.Remove(source.chromosome(), source.start(), source.end()),
-                new StructuralMutationBatch.Insert(target.chromosome(), target.position(), piece));
-        return StructuralMutationBatch.conflicts(List.of(), event) ? null : event;
+        return target != null && stage.move(source.chromosome(), source.start(), source.end(),
+                target.chromosome(), target.position());
     }
-    private SourceInterval chooseSourceInterval(List<TrackedSequence> chromosomes, int desiredLength,
+
+    private SourceInterval chooseSourceInterval(List<TrackedSequence> snapshot, int desiredLength,
                                                 GenomeRandom random) {
         List<SourceInterval> candidates = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
-        for (int c = 0; c < chromosomes.size(); c++) {
-            TrackedSequence sequence = chromosomes.get(c);
+        for (int c = 0; c < snapshot.size(); c++) {
+            TrackedSequence sequence = snapshot.get(c);
             if (sequence.bitLength() == 0) continue;
             int length = Math.min(desiredLength, sequence.bitLength());
             for (int start = 0; start + length <= sequence.bitLength(); start++) {
@@ -688,12 +711,12 @@ final class BreedingEngine {
         return index < 0 ? null : candidates.get(index);
     }
 
-    private Boundary chooseBoundary(List<TrackedSequence> chromosomes, GenomeRandom random, int excludedChromosome) {
+    private Boundary chooseBoundary(List<TrackedSequence> snapshot, GenomeRandom random, int excludedChromosome) {
         List<Boundary> candidates = new ArrayList<>();
         List<Double> weights = new ArrayList<>();
-        for (int c = 0; c < chromosomes.size(); c++) {
+        for (int c = 0; c < snapshot.size(); c++) {
             if (c == excludedChromosome) continue;
-            TrackedSequence sequence = chromosomes.get(c);
+            TrackedSequence sequence = snapshot.get(c);
             for (int p = 0; p <= sequence.bitLength(); p++) {
                 candidates.add(new Boundary(c, p));
                 weights.add(sequence.structuralBoundaryWeight(p));
@@ -704,9 +727,9 @@ final class BreedingEngine {
         return index < 0 ? null : candidates.get(index);
     }
 
-    private Boundary chooseBoundaryForChromosome(List<TrackedSequence> chromosomes, int chromosome,
+    private Boundary chooseBoundaryForChromosome(List<TrackedSequence> snapshot, int chromosome,
                                                  GenomeRandom random) {
-        TrackedSequence sequence = chromosomes.get(chromosome);
+        TrackedSequence sequence = snapshot.get(chromosome);
         double[] weights = new double[sequence.bitLength() + 1];
         for (int p = 0; p < weights.length; p++) weights[p] = sequence.structuralBoundaryWeight(p);
         int index = Sampling.weightedIndex(weights, random);
