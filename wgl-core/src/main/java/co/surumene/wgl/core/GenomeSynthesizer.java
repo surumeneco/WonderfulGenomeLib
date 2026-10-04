@@ -440,17 +440,23 @@ final class GenomeSynthesizer {
 
     private static final class MutableScaffold {
         private BitSequence bits;
-        private List<Interval> protectedIntervals;
+        private List<Interval> backboneProtectedIntervals;
+        private List<GeneratedInterval> generatedIntervals;
 
         MutableScaffold(ChromosomeTemplate template) {
             this.bits = template.templateBits();
             List<Interval> intervals = new ArrayList<>();
-            for (AnchorSeed seed : template.anchors()) intervals.add(new Interval(seed.position(), seed.position() + 48));
-            if (template.markerLocus() != null) {
-                intervals.add(new Interval(template.markerLocus().first().position(), template.markerLocus().first().position() + 48));
-                intervals.add(new Interval(template.markerLocus().second().position(), template.markerLocus().second().position() + 48));
+            for (AnchorSeed seed : template.anchors()) {
+                intervals.add(new Interval(seed.position(), seed.position() + 48));
             }
-            this.protectedIntervals = merge(intervals);
+            if (template.markerLocus() != null) {
+                intervals.add(new Interval(template.markerLocus().first().position(),
+                        template.markerLocus().first().position() + 48));
+                intervals.add(new Interval(template.markerLocus().second().position(),
+                        template.markerLocus().second().position() + 48));
+            }
+            this.backboneProtectedIntervals = merge(intervals);
+            this.generatedIntervals = new ArrayList<>();
         }
 
         MutableScaffold(ChromosomeTemplate template, int targetLength, GenomeRandom random) {
@@ -499,40 +505,40 @@ final class GenomeSynthesizer {
             if (background.bitLength() == 0) return;
             int position = randomSafeBoundary(random);
             bits = bits.insert(position, background);
-            shiftAfterInsertion(position, background.bitLength(), false);
+            shiftAfterInsertion(position, background.bitLength());
         }
 
         private void deleteBackground(int from, int to) {
             if (from < 0 || to <= from || to > bits.bitLength()) {
                 throw new IllegalArgumentException("invalid background deletion");
             }
-            for (Interval interval : protectedIntervals) {
+            for (Interval interval : protectedRegions()) {
                 if (Math.max(from, interval.start()) < Math.min(to, interval.end())) {
-                    throw new IllegalArgumentException("background deletion overlaps protected anchor region");
+                    throw new IllegalArgumentException("background deletion overlaps protected region");
                 }
             }
             bits = bits.delete(from, to);
-            int delta = to - from;
-            List<Interval> shifted = new ArrayList<>(protectedIntervals.size());
-            for (Interval interval : protectedIntervals) {
-                if (interval.start() >= to) {
-                    shifted.add(new Interval(interval.start() - delta, interval.end() - delta));
-                } else {
-                    shifted.add(interval);
-                }
-            }
-            protectedIntervals = merge(shifted);
+            shiftAfterDeletion(from, to);
         }
 
         private List<Interval> removableIntervals() {
             List<Interval> gaps = new ArrayList<>();
             int cursor = 0;
-            for (Interval interval : protectedIntervals) {
+            for (Interval interval : protectedRegions()) {
                 if (cursor < interval.start()) gaps.add(new Interval(cursor, interval.start()));
                 cursor = Math.max(cursor, interval.end());
             }
             if (cursor < bits.bitLength()) gaps.add(new Interval(cursor, bits.bitLength()));
             return gaps;
+        }
+
+        private List<Interval> protectedRegions() {
+            List<Interval> all = new ArrayList<>(backboneProtectedIntervals.size() + generatedIntervals.size());
+            all.addAll(backboneProtectedIntervals);
+            for (GeneratedInterval generated : generatedIntervals) {
+                all.add(new Interval(generated.start(), generated.end()));
+            }
+            return merge(all);
         }
 
         private int randomSafeBoundary(GenomeRandom random) {
@@ -548,26 +554,74 @@ final class GenomeSynthesizer {
         }
 
         void insertAtSafeBoundary(BitSequence block, GenomeRandom random) {
-            int position = randomSafeBoundary(random);
-            bits = bits.insert(position, block);
-            shiftAfterInsertion(position, block.bitLength(), true);
+            insertGeneratedAtSafeBoundary(block, random, null);
         }
 
-        private void shiftAfterInsertion(int position, int delta, boolean protectInserted) {
-            List<Interval> shifted = new ArrayList<>(protectedIntervals.size() + (protectInserted ? 1 : 0));
-            for (Interval interval : protectedIntervals) {
-                if (position <= interval.start()) {
-                    shifted.add(new Interval(interval.start() + delta, interval.end() + delta));
+        void insertGeneratedAtSafeBoundary(BitSequence block, GenomeRandom random, GenomeAddress owner) {
+            Objects.requireNonNull(block, "block");
+            if (block.bitLength() == 0) throw new IllegalArgumentException("generated block must not be empty");
+            int position = randomSafeBoundary(random);
+            bits = bits.insert(position, block);
+            shiftAfterInsertion(position, block.bitLength());
+            generatedIntervals.add(new GeneratedInterval(position, position + block.bitLength(), owner));
+        }
+
+        void removeGeneratedBlocks(GenomeAddress owner) {
+            List<GeneratedInterval> targets = generatedIntervals.stream()
+                    .filter(interval -> Objects.equals(interval.owner(), owner))
+                    .sorted(Comparator.comparingInt(GeneratedInterval::start).reversed())
+                    .toList();
+            for (GeneratedInterval target : targets) {
+                generatedIntervals.remove(target);
+                bits = bits.delete(target.start(), target.end());
+                shiftAfterDeletion(target.start(), target.end());
+            }
+        }
+
+        private void shiftAfterInsertion(int position, int delta) {
+            List<Interval> shiftedBackbone = new ArrayList<>(backboneProtectedIntervals.size());
+            for (Interval interval : backboneProtectedIntervals) {
+                shiftedBackbone.add(position <= interval.start()
+                        ? new Interval(interval.start() + delta, interval.end() + delta)
+                        : interval);
+            }
+            backboneProtectedIntervals = merge(shiftedBackbone);
+
+            List<GeneratedInterval> shiftedGenerated = new ArrayList<>(generatedIntervals.size());
+            for (GeneratedInterval interval : generatedIntervals) {
+                shiftedGenerated.add(position <= interval.start()
+                        ? new GeneratedInterval(interval.start() + delta, interval.end() + delta, interval.owner())
+                        : interval);
+            }
+            generatedIntervals = shiftedGenerated;
+        }
+
+        private void shiftAfterDeletion(int from, int to) {
+            int delta = to - from;
+            List<Interval> shiftedBackbone = new ArrayList<>(backboneProtectedIntervals.size());
+            for (Interval interval : backboneProtectedIntervals) {
+                if (interval.start() >= to) {
+                    shiftedBackbone.add(new Interval(interval.start() - delta, interval.end() - delta));
                 } else {
-                    shifted.add(interval);
+                    shiftedBackbone.add(interval);
                 }
             }
-            if (protectInserted) shifted.add(new Interval(position, position + delta));
-            protectedIntervals = merge(shifted);
+            backboneProtectedIntervals = merge(shiftedBackbone);
+
+            List<GeneratedInterval> shiftedGenerated = new ArrayList<>(generatedIntervals.size());
+            for (GeneratedInterval interval : generatedIntervals) {
+                if (interval.start() >= to) {
+                    shiftedGenerated.add(new GeneratedInterval(
+                            interval.start() - delta, interval.end() - delta, interval.owner()));
+                } else {
+                    shiftedGenerated.add(interval);
+                }
+            }
+            generatedIntervals = shiftedGenerated;
         }
 
         private boolean safe(int position) {
-            for (Interval interval : protectedIntervals) {
+            for (Interval interval : protectedRegions()) {
                 if (position > interval.start() && position < interval.end()) return false;
             }
             return true;
@@ -580,13 +634,18 @@ final class GenomeSynthesizer {
             Interval current = input.getFirst();
             for (int i = 1; i < input.size(); i++) {
                 Interval next = input.get(i);
-                if (next.start() <= current.end()) current = new Interval(current.start(), Math.max(current.end(), next.end()));
-                else { out.add(current); current = next; }
+                if (next.start() <= current.end()) {
+                    current = new Interval(current.start(), Math.max(current.end(), next.end()));
+                } else {
+                    out.add(current);
+                    current = next;
+                }
             }
             out.add(current);
             return List.copyOf(out);
         }
     }
 
+    private record GeneratedInterval(int start, int end, GenomeAddress owner) {}
     private record Interval(int start, int end) {}
 }
