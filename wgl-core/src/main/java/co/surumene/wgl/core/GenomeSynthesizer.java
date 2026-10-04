@@ -29,6 +29,9 @@ final class GenomeSynthesizer {
             }
         }
 
+        boolean sawSafetyRejection = false;
+        boolean sawSafeCandidate = false;
+
         for (int attempt = 0; attempt < context.genomeRetries(); attempt++) {
             List<MutableScaffold> a = new ArrayList<>();
             List<MutableScaffold> b = new ArrayList<>();
@@ -92,7 +95,11 @@ final class GenomeSynthesizer {
                 pairs.add(new ChromosomePair(a.get(i).bits(), b.get(i).bits()));
             }
             DiploidGenome genome = new DiploidGenome(backbone.genomeFormatVersion(), pairs);
-            if (!safeDiploid(backbone, genome)) continue;
+            if (!safeDiploid(backbone, genome)) {
+                sawSafetyRejection = true;
+                continue;
+            }
+            sawSafeCandidate = true;
 
             DecodeResult<?> decoded = decoder.decode(profile, genome);
             if (target.isSatisfied(decoded.decodedGenome(), config.synthesizer().convergenceTolerance())) {
@@ -102,6 +109,10 @@ final class GenomeSynthesizer {
             SynthesisResult.Success adjusted = locallyAdjust(
                     profile, backbone, target, synthesisPlans, a, b, decoded, random);
             if (adjusted != null) return adjusted;
+        }
+        if (sawSafetyRejection && !sawSafeCandidate) {
+            return new SynthesisResult.Failure(SynthesisFailureReason.SAFETY_REJECTED,
+                    "all synthesized candidates were rejected by backbone safety policy");
         }
         return new SynthesisResult.Failure(SynthesisFailureReason.CONVERGENCE_LIMIT,
                 "target did not converge within configured retries");
