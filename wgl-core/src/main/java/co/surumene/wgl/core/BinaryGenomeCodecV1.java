@@ -10,6 +10,9 @@ public final class BinaryGenomeCodecV1 {
 
     public byte[] encode(DiploidGenome genome) {
         Objects.requireNonNull(genome, "genome");
+        if (genome.genomeFormatVersion() != 1) {
+            throw new IllegalArgumentException("unsupported genome format version: " + genome.genomeFormatVersion());
+        }
         try {
             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(buffer);
