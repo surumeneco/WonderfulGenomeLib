@@ -30,6 +30,14 @@ class PaperEngineConfigLoaderTest {
         assertDoesNotThrow(() -> PaperEngineConfigLoader.load(loadDefault()));
     }
 
+    @Test
+    void distributedConfigUsesLocalAdjustmentContributionRatioKey() throws Exception {
+        YamlConfiguration config = loadDefault();
+
+        assertTrue(config.contains("engine.synthesizer.local-adjustment-max-contribution-ratio"));
+        assertFalse(config.contains("engine.synthesizer.micro-correction-max-ratio"));
+    }
+
     private static YamlConfiguration loadDefault() throws Exception {
         try (var stream = PaperEngineConfigLoaderTest.class.getResourceAsStream("/config.yml")) {
             assertNotNull(stream, "config.yml must be on the test runtime classpath");
