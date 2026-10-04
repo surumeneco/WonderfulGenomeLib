@@ -14,11 +14,13 @@ final class GenomeDecoderEngine {
         List<LocatedGene> direct=genes.stream().filter(g->g.gene.addressValid()&&!g.gene.regulation()).toList();
         List<LocatedGene> regulation=genes.stream().filter(g->g.gene.regulation()).toList();
 
+        Map<LocatedGene,Double> dBase=new IdentityHashMap<>();
         Map<LocatedGene,Double> dLocal=new IdentityHashMap<>();
         for(LocatedGene g:direct){
             DirectContributionModel model=profile.contributionModel(g.gene.address());
             double d0=model.baseEffect(g.gene.address(),g.gene.negative(),g.gene.magnitudeCode(),g.gene.expressionCode());
             double cis=cisMultiplier(g,regulation);
+            dBase.put(g,d0);
             dLocal.put(g,d0*cis);
         }
 
@@ -30,7 +32,7 @@ final class GenomeDecoderEngine {
         for(LocatedGene g:direct){
             GenomeAddress address=g.gene.address();
             double d=dLocal.get(g)*trans.getOrDefault(address,1.0)*epi.getOrDefault(address,1.0);
-            d=applyFinalClamp(d,dLocal.get(g));
+            d=applyFinalClamp(d,dBase.get(g));
             raws.add(new RawContribution(address,d,g.chromosome,g.haplotype,g.gene.startBit(),false));
         }
         raws.addAll(relayContributions(profile,genes,dLocal,trans,epi));
@@ -78,7 +80,7 @@ final class GenomeDecoderEngine {
             if(t==0x00)mult*=1+(config.regulation().cisEnhancerMax()-1)*q;
             else mult*=1-(1-config.regulation().cisSilencerMin())*q;
         }
-        return clamp(mult,config.regulation().finalMultiplierMin(),config.regulation().finalMultiplierMax());
+        return mult;
     }
 
     private double insulatorTransmission(LocatedGene target,LocatedGene cis,List<LocatedGene> regs){
@@ -115,7 +117,6 @@ final class GenomeDecoderEngine {
             double m=t==0x02?1+(config.regulation().transEnhancerMax()-1)*q:1-(1-config.regulation().transSilencerMin())*q;
             out.merge(target,m,(a,b)->a*b);
         }
-        out.replaceAll((k,v)->clamp(v,config.regulation().finalMultiplierMin(),config.regulation().finalMultiplierMax()));
         return out;
     }
 
@@ -129,7 +130,7 @@ final class GenomeDecoderEngine {
             double m=t==0x0C?1+(config.regulation().epistasisEnhancerMax()-1)*q:1-(1-config.regulation().epistasisSilencerMin())*q;
             out.merge(target,m,(a,b)->a*b);
         }
-        out.replaceAll((k,v)->clamp(v,config.regulation().finalMultiplierMin(),config.regulation().finalMultiplierMax()));return out;
+        return out;
     }
 
     private List<RawContribution> relayContributions(GenomeProfile<?> profile,List<LocatedGene> all,Map<LocatedGene,Double>dLocal,
