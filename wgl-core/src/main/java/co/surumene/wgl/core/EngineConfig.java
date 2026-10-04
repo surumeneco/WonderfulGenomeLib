@@ -26,7 +26,7 @@ public record EngineConfig(Homology homology, Recombination recombination, Mutat
                              double transSilencerMin, double epistasisEnhancerMax, double epistasisSilencerMin) {}
     public record RateBand(double hotspotMax, double coldspotMin, double finalMin, double finalMax) {}
     public record LocalRates(RateBand recombination, RateBand point, RateBand structural) {}
-    public record Synthesizer(double convergenceTolerance, int localAdjustmentMaxIterations, double microCorrectionMaxRatio) {}
+    public record Synthesizer(double convergenceTolerance, int localAdjustmentMaxIterations, double localAdjustmentMaxContributionRatio) {}
 
     public EngineConfig {
         if (homology == null || recombination == null || mutation == null || regulation == null || localRates == null || synthesizer == null) {
@@ -70,7 +70,7 @@ public record EngineConfig(Homology homology, Recombination recombination, Mutat
         validateRateBand(localRates.structural, "structural local rate");
         if (!finite(synthesizer.convergenceTolerance) || synthesizer.convergenceTolerance < 0) throw new IllegalArgumentException("invalid convergence tolerance");
         validatePositive(synthesizer.localAdjustmentMaxIterations, "synthesizer iterations");
-        probability(synthesizer.microCorrectionMaxRatio, "micro correction ratio");
+        probability(synthesizer.localAdjustmentMaxContributionRatio, "local adjustment max contribution ratio");
         validatePositive(eventRetryMax, "event retry max");
     }
 
