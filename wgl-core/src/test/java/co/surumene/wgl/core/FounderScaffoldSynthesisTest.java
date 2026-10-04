@@ -45,6 +45,42 @@ class FounderScaffoldSynthesisTest {
         assertTrue(pair.haplotypeA().bitLength() != 1000 || pair.haplotypeB().bitLength() != 1000);
     }
 
+    @Test
+    void variableLengthAdjustmentPreservesEveryProtectedAnchorWindow() {
+        BackboneDefinition base = TestBackbones.singlePair(1024);
+        ChromosomeTemplate original = base.chromosomes().getFirst();
+        ChromosomeTemplate variable = new ChromosomeTemplate(
+                original.templateBits(),
+                original.anchors(),
+                original.markerLocus(),
+                new FounderScaffoldTolerance(0.05, 0.90, 1.10));
+        BackboneDefinition backbone = new BackboneDefinition(
+                "anchor-preservation",
+                1,
+                List.of(variable),
+                new StandardGenomeSafetyPolicyV1());
+
+        SynthesisResult.Success result = synthesizeEmpty(backbone, 734L);
+        ChromosomePair pair = result.genome().chromosomePairs().getFirst();
+
+        for (AnchorSeed anchor : original.anchors()) {
+            assertTrue(contains(pair.haplotypeA(), anchor.canonicalBits()));
+            assertTrue(contains(pair.haplotypeB(), anchor.canonicalBits()));
+        }
+        assertTrue(contains(pair.haplotypeA(), original.markerLocus().first().canonicalBits()));
+        assertTrue(contains(pair.haplotypeA(), original.markerLocus().second().canonicalBits()));
+        assertTrue(contains(pair.haplotypeB(), original.markerLocus().first().canonicalBits()));
+        assertTrue(contains(pair.haplotypeB(), original.markerLocus().second().canonicalBits()));
+    }
+
+    private static boolean contains(BitSequence haystack, BitSequence needle) {
+        if (needle.bitLength() == 0) return true;
+        for (int i = 0; i + needle.bitLength() <= haystack.bitLength(); i++) {
+            if (haystack.slice(i, i + needle.bitLength()).equals(needle)) return true;
+        }
+        return false;
+    }
+
     private static SynthesisResult.Success synthesizeEmpty(BackboneDefinition backbone, long seed) {
         GenomeProfile<DecodedGenome> profile = new GenomeProfile<>() {
             @Override public ProfileDescriptor descriptor() {
