@@ -144,16 +144,24 @@ final class GenomeSynthesizer {
             }
             BitSequence gene = GeneCodecV1.encode(address, negative, magnitude, 15, extension);
             BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
+
+            List<MutableScaffold> trialA = copyScaffolds(a);
+            List<MutableScaffold> trialB = copyScaffolds(b);
             int chromosome = weightedChromosome(backbone, random);
-            MutableScaffold scaffold = random.nextBoolean() ? a.get(chromosome) : b.get(chromosome);
+            MutableScaffold scaffold = random.nextBoolean()
+                    ? trialA.get(chromosome) : trialB.get(chromosome);
             scaffold.insertGeneratedAtSafeBoundary(spacer.concat(gene), random, address);
 
-            DiploidGenome genome = currentGenome(backbone, a, b);
-            if (!safeDiploid(backbone, genome)) break;
+            DiploidGenome genome = currentGenome(backbone, trialA, trialB);
+            if (!safeDiploid(backbone, genome)) continue;
+
             DecodeResult<?> next = decoder.decode(profile, genome);
             double nextError = totalError(synthesisPlans, next.decodedGenome());
             double currentError = totalError(synthesisPlans, decoded.decodedGenome());
-            if (!(nextError < currentError)) break;
+            if (!(nextError < currentError)) continue;
+
+            replaceScaffolds(a, trialA);
+            replaceScaffolds(b, trialB);
             decoded = next;
         }
 
@@ -268,6 +276,18 @@ final class GenomeSynthesizer {
             MutableScaffold scaffold = haplotype == 0 ? a.get(chromosome) : b.get(chromosome);
             scaffold.insertAtSafeBoundary(block.bits(), random);
         }
+    }
+
+    private static List<MutableScaffold> copyScaffolds(List<MutableScaffold> source) {
+        List<MutableScaffold> copy = new ArrayList<>(source.size());
+        for (MutableScaffold scaffold : source) copy.add(scaffold.copy());
+        return copy;
+    }
+
+    private static void replaceScaffolds(List<MutableScaffold> target,
+                                         List<MutableScaffold> replacement) {
+        target.clear();
+        target.addAll(replacement);
     }
 
     private static DiploidGenome currentGenome(BackboneDefinition backbone,
@@ -507,6 +527,18 @@ final class GenomeSynthesizer {
         MutableScaffold(ChromosomeTemplate template, int targetLength, GenomeRandom random) {
             this(template);
             resizeTo(targetLength, random);
+        }
+
+        private MutableScaffold(BitSequence bits,
+                                List<Interval> backboneProtectedIntervals,
+                                List<GeneratedInterval> generatedIntervals) {
+            this.bits = bits;
+            this.backboneProtectedIntervals = new ArrayList<>(backboneProtectedIntervals);
+            this.generatedIntervals = new ArrayList<>(generatedIntervals);
+        }
+
+        MutableScaffold copy() {
+            return new MutableScaffold(bits, backboneProtectedIntervals, generatedIntervals);
         }
 
         BitSequence bits() { return bits; }
