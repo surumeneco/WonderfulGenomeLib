@@ -342,12 +342,13 @@ final class GenomeSynthesizer {
             }
             bits = bits.insert(position, block);
             int delta = block.bitLength();
-            List<Interval> shifted = new ArrayList<>(protectedIntervals.size());
+            List<Interval> shifted = new ArrayList<>(protectedIntervals.size() + 1);
             for (Interval interval : protectedIntervals) {
                 if (position <= interval.start()) shifted.add(new Interval(interval.start() + delta, interval.end() + delta));
                 else shifted.add(interval);
             }
-            protectedIntervals = shifted;
+            shifted.add(new Interval(position, position + delta));
+            protectedIntervals = merge(shifted);
         }
 
         private boolean safe(int position) {
