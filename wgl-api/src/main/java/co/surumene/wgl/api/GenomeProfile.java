@@ -11,6 +11,15 @@ public interface GenomeProfile<P> {
     DirectContributionModel contributionModel(GenomeAddress address);
 
     /**
+     * Map one consumer continuous target into generic positive/negative bounded contribution targets.
+     * The default preserves WGL's standard P * N synthesis behavior.
+     */
+    default SynthesisAddressPlan synthesisPlan(GenomeAddress address, double target,
+                                               SynthesisContext context, GenomeRandom random) {
+        return SynthesisAddressPlan.boundedProduct(target, context, random);
+    }
+
+    /**
      * Build the profile-owned extension payload for a synthesized direct gene.
      * Implementations must return between minimumExtensionBits(address) and 64 bits.
      */
