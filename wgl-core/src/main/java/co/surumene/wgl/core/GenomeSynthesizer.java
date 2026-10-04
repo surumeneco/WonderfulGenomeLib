@@ -75,7 +75,6 @@ final class GenomeSynthesizer {
             DecodeResult<?> decoded = decoder.decode(profile, genome);
             if (!synthesisSafe(profile, genome, decoded.decodedGenome())) {
                 sawSafetyRejection = true;
-                sawSafeCandidate = false;
                 continue;
             }
             sawSafeCandidate = true;
