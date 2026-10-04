@@ -89,8 +89,8 @@ engine:
     convergence-tolerance: 0.002
     # Maximum local adjustment iterations before higher-level regeneration.
     local-adjustment-max-iterations: 128
-    # Maximum relative size of a micro-correction contribution.
-    micro-correction-max-ratio: 0.05
+    # Maximum relative size of one ordinary local-adjustment contribution.
+    local-adjustment-max-contribution-ratio: 0.05
 
   # Maximum retries for one invalid mutation/recombination event before cancelling that event.
   event-retry-max: 32
