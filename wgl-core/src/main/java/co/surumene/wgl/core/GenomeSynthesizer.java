@@ -40,7 +40,8 @@ final class GenomeSynthesizer {
                 b.add(new MutableScaffold(template, sampleFounderLength(template, random), random));
             }
 
-            placeProfileBlocks(profile, backbone, target, context, a, b, random);
+            int profileBlockCount = placeProfileBlocks(
+                    profile, backbone, target, context, a, b, random);
 
             boolean unsatisfiable = false;
             Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans = new TreeMap<>();
@@ -85,6 +86,12 @@ final class GenomeSynthesizer {
             SynthesisResult.Success regenerated = regenerateProblematicAddress(
                     profile, backbone, target, context, synthesisPlans, a, b, random);
             if (regenerated != null) return regenerated;
+
+            if (profileBlockCount > 0) {
+                SynthesisResult.Success profileBlocksRegenerated = regenerateProfileBlocks(
+                        profile, backbone, target, context, synthesisPlans, a, b, random);
+                if (profileBlocksRegenerated != null) return profileBlocksRegenerated;
+            }
         }
         if (sawSafetyRejection && !sawSafeCandidate) {
             return new SynthesisResult.Failure(SynthesisFailureReason.SAFETY_REJECTED,
@@ -213,6 +220,35 @@ final class GenomeSynthesizer {
         return locallyAdjust(profile, backbone, target, synthesisPlans, a, b, regeneratedDecoded, random);
     }
 
+    private SynthesisResult.Success regenerateProfileBlocks(
+            GenomeProfile<?> profile,
+            BackboneDefinition backbone,
+            SynthesisTarget target,
+            SynthesisContext context,
+            Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans,
+            List<MutableScaffold> a,
+            List<MutableScaffold> b,
+            GenomeRandom random) {
+        List<MutableScaffold> trialA = copyScaffolds(a);
+        List<MutableScaffold> trialB = copyScaffolds(b);
+        for (MutableScaffold scaffold : trialA) scaffold.removeGeneratedBlocks(null);
+        for (MutableScaffold scaffold : trialB) scaffold.removeGeneratedBlocks(null);
+
+        placeProfileBlocks(profile, backbone, target, context, trialA, trialB, random);
+
+        DiploidGenome regeneratedGenome = currentGenome(backbone, trialA, trialB);
+        if (!safeDiploid(backbone, regeneratedGenome)) return null;
+
+        double tolerance = config.synthesizer().convergenceTolerance();
+        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
+        if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
+            return new SynthesisResult.Success(regeneratedGenome, regeneratedDecoded);
+        }
+        return locallyAdjust(
+                profile, backbone, target, synthesisPlans,
+                trialA, trialB, regeneratedDecoded, random);
+    }
+
     private static boolean placeAddressPlan(GenomeProfile<?> profile,
                                             BackboneDefinition backbone,
                                             SynthesisTarget target,
@@ -252,7 +288,7 @@ final class GenomeSynthesizer {
         return true;
     }
 
-    private static void placeProfileBlocks(GenomeProfile<?> profile,
+    private static int placeProfileBlocks(GenomeProfile<?> profile,
                                            BackboneDefinition backbone,
                                            SynthesisTarget target,
                                            SynthesisContext context,
@@ -276,6 +312,7 @@ final class GenomeSynthesizer {
             MutableScaffold scaffold = haplotype == 0 ? a.get(chromosome) : b.get(chromosome);
             scaffold.insertAtSafeBoundary(block.bits(), random);
         }
+        return blocks.size();
     }
 
     private static List<MutableScaffold> copyScaffolds(List<MutableScaffold> source) {
