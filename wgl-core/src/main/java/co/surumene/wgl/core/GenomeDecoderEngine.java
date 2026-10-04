@@ -36,6 +36,11 @@ final class GenomeDecoderEngine {
             raws.add(new RawContribution(address,d,g.chromosome,g.haplotype,g.gene.startBit(),false));
         }
         raws.addAll(relayContributions(profile,genes,dLocal,trans,epi));
+        raws.sort(Comparator.comparingInt(RawContribution::chromosome)
+                .thenComparingInt(RawContribution::haplotype)
+                .thenComparingInt(RawContribution::start)
+                .thenComparingInt(r -> r.secondary() ? 1 : 0)
+                .thenComparing(RawContribution::address));
 
         Map<GenomeAddress,List<EffectiveContribution>> byAddress=new TreeMap<>();
         for(RawContribution r:raws){
