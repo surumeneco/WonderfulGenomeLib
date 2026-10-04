@@ -286,10 +286,8 @@ final class BreedingEngine {
         if (map.blocks().isEmpty()) return chooseWholeChromatid(pair, chromosome, constraints, random);
 
         double meanLength = (pair.a().bitLength() + pair.b().bitLength()) / 2.0;
-        double lambda = Math.max(0.0,
-                (meanLength - config.recombination().extraCrossoverStartBits())
-                        / config.recombination().extraCrossoverScaleBits());
-        int targetCount = 1 + Sampling.poisson(lambda, random);
+        int targetCount = RecombinationEventPlan.normalCrossoverTargetCount(
+                meanLength, config.recombination(), random);
         List<CrossCandidate> candidates = buildCrossCandidates(pair, map.blocks(), constraints);
         List<CrossCandidate> selected = new ArrayList<>(selectCrosses(candidates, targetCount, random));
         if (selected.isEmpty()) return chooseWholeChromatid(pair, chromosome, constraints, random);
@@ -310,11 +308,8 @@ final class BreedingEngine {
         HomologyMap map = homology.analyze(pair.a().bits(), pair.b().bits());
 
         double meanLength = (pair.a().bitLength() + pair.b().bitLength()) / 2.0;
-        double lambda = Math.max(0.0,
-                (meanLength - config.recombination().extraCrossoverStartBits())
-                        / config.recombination().extraCrossoverScaleBits());
-        int totalEventCount = 1 + Sampling.poisson(lambda, random);
-        int normalCount = Math.max(0, totalEventCount - 1);
+        int normalCount = RecombinationEventPlan.normalCrossoverTargetCount(
+                meanLength, config.recombination(), random);
 
         List<CrossCandidate> normal = normalCount == 0 || map.blocks().isEmpty()
                 ? List.of()
