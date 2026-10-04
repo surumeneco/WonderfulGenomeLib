@@ -24,6 +24,19 @@ class StructuralMutationBatchTest {
         assertEquals(first.getFirst().bits(), second.getFirst().bits());
     }
 
+
+    @Test
+    void zeroLengthReplacementRepresentsTailInsertionAtChromosomeEnd() {
+        List<TrackedSequence> snapshot = List.of(
+                TrackedSequence.fresh(BitSequence.fromBits("0011")));
+        var insertTail = new StructuralMutationBatch.Replace(
+                0, 4, 4, TrackedSequence.fresh(BitSequence.fromBits("10")));
+
+        var result = StructuralMutationBatch.apply(snapshot, List.of(insertTail));
+
+        assertEquals("001110", result.getFirst().bits().toBitString());
+    }
+
     @Test
     void rejectsCompetingEdits() {
         var remove = new StructuralMutationBatch.Remove(0, 10, 20);
