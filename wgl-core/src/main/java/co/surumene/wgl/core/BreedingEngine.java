@@ -156,7 +156,8 @@ final class BreedingEngine {
                     .filter(a -> !normal.contains(anchorKey(a.positionA(), a.positionB())))
                     .toList();
             for (HomologyCandidate alternative : alternatives) {
-                double contextQuality = hasSupportingAlternative(alternative, alternatives) ? 1.0 : 0.5;
+                double contextQuality = NahrSupport.hasSupportingAlternative(
+                        alternative, alternatives, config.homology().maxAnchorGapBits()) ? 1.0 : 0.5;
                 out.add(new NahrCandidate(NahrKind.HOMOLOG_UNEQUAL, chromosome, 0, alternative.positionA(),
                         chromosome, 1, alternative.positionB(), alternative.hammingDistance(), contextQuality));
             }
@@ -263,17 +264,6 @@ final class BreedingEngine {
         for (NahrCandidate candidate : candidates) a += candidate.weight();
         double max = config.mutation().nahr().structureMultiplierMax();
         return 1.0 + (max - 1.0) * (1.0 - StrictMath.exp(-a / 8.0));
-    }
-
-    private static boolean hasSupportingAlternative(HomologyCandidate candidate, List<HomologyCandidate> all) {
-        for (HomologyCandidate other : all) {
-            if (other == candidate) continue;
-            int da = other.positionA() - candidate.positionA();
-            int db = other.positionB() - candidate.positionB();
-            if (da == 0 || db == 0 || Integer.signum(da) != Integer.signum(db)) continue;
-            if (Math.abs(da) <= 1024 && Math.abs(db) <= 1024) return true;
-        }
-        return false;
     }
 
     private static long anchorKey(int a, int b) {
