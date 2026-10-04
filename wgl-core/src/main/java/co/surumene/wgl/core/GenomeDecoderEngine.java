@@ -75,7 +75,7 @@ final class GenomeDecoderEngine {
             if(reg.chromosome!=target.chromosome||reg.haplotype!=target.haplotype)continue;
             int t=reg.gene.address().target(); if(t!=0x00&&t!=0x01)continue;
             int raw=reg.gene.rawEffectByte(); int radiusCode=(raw>>>4)&0xF, strength=raw&0xF;
-            int radius=32*(radiusCode+1); int distance=StrictMath.abs(reg.gene.startBit()-target.gene.startBit());
+            int radius=32*(radiusCode+1); int distance=StrictMath.abs(startMotifPosition(reg.gene)-startMotifPosition(target.gene));
             if(distance>radius)continue;
             double z=Math.min(1.0,distance/(double)radius);
             double attenuation=1-(3*z*z-2*z*z*z);
@@ -166,6 +166,11 @@ final class GenomeDecoderEngine {
     }
     private static AddressAggregate aggregate(List<EffectiveContribution> contributions){
         double lp=0,ln=0;for(EffectiveContribution c:contributions){double u=c.saturation();if(c.effect()>=0)lp+=StrictMath.log1p(-u);else ln+=StrictMath.log1p(-u);}double p=-StrictMath.expm1(lp),n=StrictMath.exp(ln);return new AddressAggregate(p,n,p*n,contributions);
+    }
+    private static int startMotifPosition(DecodedGene gene){
+        return gene.orientation()==GeneOrientation.FORWARD
+                ? gene.startBit()
+                : gene.endBitExclusive()-GeneCodecV1.START.bitLength();
     }
     private static double clamp(double v,double min,double max){return Math.max(min,Math.min(max,v));}
     private record RawContribution(GenomeAddress address,double effect,int chromosome,int haplotype,int start,boolean secondary){}
