@@ -35,7 +35,7 @@ public record SynthesisAddressPlan(
 
         double draw = context.cancellationMin()
                 + (context.cancellationMax() - context.cancellationMin()) * random.nextDouble();
-        double q = Math.min(draw, Math.max(0.0, 0.98 - target));
+        double q = Math.min(draw, Math.max(0.0, 1.0 - target));
         double survival = 1.0 - q;
         double p = target / survival;
 
