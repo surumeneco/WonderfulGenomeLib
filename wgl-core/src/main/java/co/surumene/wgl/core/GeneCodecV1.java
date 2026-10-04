@@ -13,8 +13,13 @@ public final class GeneCodecV1 {
     }
 
     public static BitSequence encodeRawEffect(GenomeAddress address, int rawEffectByte, int expressionCode, BitSequence extension) {
+        java.util.Objects.requireNonNull(address, "address");
+        java.util.Objects.requireNonNull(extension, "extension");
         if (rawEffectByte < 0 || rawEffectByte > 255 || expressionCode < 0 || expressionCode > 15) {
             throw new IllegalArgumentException("gene field out of range");
+        }
+        if (extension.bitLength() > 64) {
+            throw new IllegalArgumentException("Genome Format V1 extension must be <= 64 bits");
         }
         BitHeader22 h=Secded22.encode(address);
         return START.concat(BitSequence.fromBits(h.toBitString())).concat(BitSequence.fromLong(rawEffectByte,8))
