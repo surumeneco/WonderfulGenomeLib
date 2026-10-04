@@ -65,6 +65,7 @@ final class StructuralMutationBatch {
         for (int chromosome = 0; chromosome < snapshot.size(); chromosome++) {
             TrackedSequence initial = snapshot.get(chromosome);
             List<Edit> local = edits.stream().filter(e -> e.chromosome() == chromosome)
+                    .map(e -> (Edit) e)
                     .sorted(Comparator.comparingInt(Edit::coordinate).reversed()
                             .thenComparingInt(StructuralMutationBatch::editPriority))
                     .toList();
