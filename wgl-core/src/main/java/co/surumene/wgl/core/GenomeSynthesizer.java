@@ -40,6 +40,8 @@ final class GenomeSynthesizer {
                 b.add(new MutableScaffold(template, sampleFounderLength(template, random), random));
             }
 
+            placeProfileBlocks(profile, backbone, target, context, a, b, random);
+
             boolean unsatisfiable = false;
             Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans = new TreeMap<>();
             for (var e : new TreeMap<>(target.continuousTargets()).entrySet()) {
