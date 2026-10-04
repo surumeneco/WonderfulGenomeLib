@@ -60,7 +60,7 @@ class SynthesizerLocalAdjustmentRollbackTest {
                 new EngineConfig.Synthesizer(
                         defaults.synthesizer().convergenceTolerance(),
                         1,
-                        defaults.synthesizer().microCorrectionMaxRatio()),
+                        defaults.synthesizer().localAdjustmentMaxContributionRatio()),
                 defaults.eventRetryMax());
 
         GenomeRandom deterministic = new GenomeRandom() {
