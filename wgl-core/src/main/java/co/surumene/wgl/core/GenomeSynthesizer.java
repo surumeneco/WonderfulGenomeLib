@@ -76,7 +76,8 @@ final class GenomeSynthesizer {
 
             DecodeResult<?> decoded = decoder.decode(profile, genome);
             if (target.isSatisfied(decoded.decodedGenome(), config.synthesizer().convergenceTolerance())) {
-                return new SynthesisResult.Success(genome, decoded);
+                return successWithMicroCorrections(
+                        profile, backbone, target, synthesisPlans, a, b, decoded, random);
             }
 
             SynthesisResult.Success adjusted = locallyAdjust(
@@ -115,8 +116,8 @@ final class GenomeSynthesizer {
 
         for (int iteration = 0; iteration < config.synthesizer().localAdjustmentMaxIterations(); iteration++) {
             if (target.isSatisfied(decoded.decodedGenome(), tolerance)) {
-                DiploidGenome genome = currentGenome(backbone, a, b);
-                return new SynthesisResult.Success(genome, decoded);
+                return successWithMicroCorrections(
+                        profile, backbone, target, synthesisPlans, a, b, decoded, random);
             }
 
             Residual residual = largestResidual(synthesisPlans, decoded.decodedGenome(), tolerance);
@@ -176,7 +177,9 @@ final class GenomeSynthesizer {
         if (!safeDiploid(backbone, genome)) return null;
         DecodeResult<?> finalDecoded = decoder.decode(profile, genome);
         return target.isSatisfied(finalDecoded.decodedGenome(), tolerance)
-                ? new SynthesisResult.Success(genome, finalDecoded) : null;
+                ? successWithMicroCorrections(
+                        profile, backbone, target, synthesisPlans, a, b, finalDecoded, random)
+                : null;
     }
 
     private SynthesisResult.Success regenerateProblematicAddress(
@@ -215,7 +218,8 @@ final class GenomeSynthesizer {
         if (!safeDiploid(backbone, regeneratedGenome)) return null;
         DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
-            return new SynthesisResult.Success(regeneratedGenome, regeneratedDecoded);
+            return successWithMicroCorrections(
+                    profile, backbone, target, synthesisPlans, a, b, regeneratedDecoded, random);
         }
         return locallyAdjust(profile, backbone, target, synthesisPlans, a, b, regeneratedDecoded, random);
     }
@@ -242,7 +246,9 @@ final class GenomeSynthesizer {
         double tolerance = config.synthesizer().convergenceTolerance();
         DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
-            return new SynthesisResult.Success(regeneratedGenome, regeneratedDecoded);
+            return successWithMicroCorrections(
+                    profile, backbone, target, synthesisPlans,
+                    trialA, trialB, regeneratedDecoded, random);
         }
 
         SynthesisResult.Success adjusted = locallyAdjust(
@@ -253,6 +259,171 @@ final class GenomeSynthesizer {
         return regenerateProblematicAddress(
                 profile, backbone, target, context, synthesisPlans,
                 trialA, trialB, random);
+    }
+
+    private SynthesisResult.Success successWithMicroCorrections(
+            GenomeProfile<?> profile,
+            BackboneDefinition backbone,
+            SynthesisTarget target,
+            Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans,
+            List<MutableScaffold> a,
+            List<MutableScaffold> b,
+            DecodeResult<?> initial,
+            GenomeRandom random) {
+        double tolerance = config.synthesizer().convergenceTolerance();
+        DecodeResult<?> decoded = initial;
+
+        for (var entry : new TreeMap<>(synthesisPlans).entrySet()) {
+            AddressAggregate aggregate = decoded.decodedGenome().aggregate(entry.getKey());
+            MicroResidual residual = microResidual(entry.getKey(), entry.getValue(), aggregate, tolerance);
+            if (residual == null) continue;
+
+            DirectContributionModel model = profile.contributionModel(residual.address());
+            MicroGene micro = bestMicroGene(
+                    model, residual.address(), residual.negative(),
+                    residual.currentSaturation(), residual.targetSaturation(), tolerance);
+            if (micro == null) continue;
+
+            BitSequence extension = Objects.requireNonNull(
+                    profile.synthesisExtension(residual.address(), target, random),
+                    "profile synthesisExtension returned null");
+            int minimumExtension = GenomeFormatV1.minimumExtensionBits(residual.address(), profile);
+            if (minimumExtension < 0 || minimumExtension > 64
+                    || extension.bitLength() < minimumExtension || extension.bitLength() > 64) {
+                throw new IllegalStateException("invalid synthesis extension length for " + residual.address()
+                        + ": " + extension.bitLength() + " bits, minimum=" + minimumExtension);
+            }
+
+            BitSequence gene = GeneCodecV1.encode(
+                    residual.address(), residual.negative(),
+                    micro.magnitude(), micro.expression(), extension);
+            BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
+
+            List<MutableScaffold> trialA = copyScaffolds(a);
+            List<MutableScaffold> trialB = copyScaffolds(b);
+            int chromosome = weightedChromosome(backbone, random);
+            int haplotype = random.nextBoolean() ? 0 : 1;
+            MutableScaffold scaffold = haplotype == 0
+                    ? trialA.get(chromosome) : trialB.get(chromosome);
+            int insertion = scaffold.insertGeneratedAtSafeBoundary(
+                    spacer.concat(gene), random, residual.address());
+            int geneStart = insertion + spacer.bitLength();
+
+            DiploidGenome trialGenome = currentGenome(backbone, trialA, trialB);
+            if (!safeDiploid(backbone, trialGenome)) continue;
+
+            DecodeResult<?> next = decoder.decode(profile, trialGenome);
+            if (feedsRelay(next.decodedGenome(), chromosome, haplotype, geneStart)) continue;
+            if (!target.isSatisfied(next.decodedGenome(), tolerance)) continue;
+
+            AddressAggregate nextAggregate = next.decodedGenome().aggregate(residual.address());
+            double nextSaturation = residual.negative()
+                    ? 1.0 - nextAggregate.negativeSurvival()
+                    : nextAggregate.positiveSaturation();
+            double actualDelta = nextSaturation - residual.currentSaturation();
+            if (!(actualDelta > 0.0)
+                    || actualDelta > residual.absoluteError() + 1.0e-12
+                    || actualDelta > tolerance + 1.0e-12) {
+                continue;
+            }
+
+            double currentError = totalError(synthesisPlans, decoded.decodedGenome());
+            double nextError = totalError(synthesisPlans, next.decodedGenome());
+            if (!(nextError < currentError)) continue;
+
+            replaceScaffolds(a, trialA);
+            replaceScaffolds(b, trialB);
+            decoded = next;
+        }
+
+        return new SynthesisResult.Success(currentGenome(backbone, a, b), decoded);
+    }
+
+    private static MicroResidual microResidual(
+            GenomeAddress address,
+            SynthesisAddressPlan plan,
+            AddressAggregate aggregate,
+            double tolerance) {
+        double positive = plan.positiveSaturation() - aggregate.positiveSaturation();
+        double negativeCurrent = 1.0 - aggregate.negativeSurvival();
+        double negative = plan.negativeSaturation() - negativeCurrent;
+
+        MicroResidual best = null;
+        if (positive > 1.0e-12 && positive <= tolerance + 1.0e-12) {
+            best = new MicroResidual(
+                    address, false, aggregate.positiveSaturation(),
+                    plan.positiveSaturation(), positive);
+        }
+        if (negative > 1.0e-12 && negative <= tolerance + 1.0e-12
+                && (best == null || negative > best.absoluteError())) {
+            best = new MicroResidual(
+                    address, true, negativeCurrent,
+                    plan.negativeSaturation(), negative);
+        }
+        return best;
+    }
+
+    private static MicroGene bestMicroGene(
+            DirectContributionModel model,
+            GenomeAddress address,
+            boolean negative,
+            double currentSaturation,
+            double targetSaturation,
+            double tolerance) {
+        double residual = targetSaturation - currentSaturation;
+        if (!(residual > 1.0e-12) || residual > tolerance + 1.0e-12) return null;
+
+        MicroGene best = null;
+        for (int expression = 1; expression <= 15; expression++) {
+            for (int magnitude = 1; magnitude <= 127; magnitude++) {
+                double d = model.baseEffect(address, negative, magnitude, expression);
+                double u = model.saturation(address, StrictMath.abs(d));
+                if (!(u > 0.0) || u > tolerance + 1.0e-12) continue;
+
+                double predicted = 1.0 - (1.0 - currentSaturation) * (1.0 - u);
+                double delta = predicted - currentSaturation;
+                if (!(delta > 0.0) || delta > residual + 1.0e-12) continue;
+
+                double error = targetSaturation - predicted;
+                if (best == null || error < best.remainingError() - 1.0e-15) {
+                    best = new MicroGene(magnitude, expression, error);
+                }
+            }
+        }
+        return best;
+    }
+
+    private static boolean feedsRelay(
+            DecodedGenome decoded, int chromosome, int haplotype, int sourceStart) {
+        List<DecodedGene> lane = decoded.physicalGenes().stream()
+                .filter(gene -> gene.chromosomeIndex() == chromosome
+                        && gene.haplotypeIndex() == haplotype)
+                .sorted(Comparator.comparingInt(DecodedGene::startBit))
+                .toList();
+
+        for (int i = 0; i < lane.size(); i++) {
+            DecodedGene gene = lane.get(i);
+            if (gene.startBit() != sourceStart) continue;
+
+            if (i + 1 < lane.size()) {
+                DecodedGene next = lane.get(i + 1);
+                if (next.regulation()
+                        && next.address().target() == 0x06
+                        && next.orientation() == GeneOrientation.FORWARD) {
+                    return true;
+                }
+            }
+            if (i > 0) {
+                DecodedGene previous = lane.get(i - 1);
+                if (previous.regulation()
+                        && previous.address().target() == 0x06
+                        && previous.orientation() == GeneOrientation.REVERSE) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
     }
 
     private static boolean placeAddressPlan(GenomeProfile<?> profile,
@@ -396,6 +567,12 @@ final class GenomeSynthesizer {
 
     private record Residual(GenomeAddress address, boolean negative,
                             double targetSaturation, double absoluteError) {}
+
+    private record MicroResidual(GenomeAddress address, boolean negative,
+                                 double currentSaturation, double targetSaturation,
+                                 double absoluteError) {}
+
+    private record MicroGene(int magnitude, int expression, double remainingError) {}
 
     private static GenePlan bestPlan(DirectContributionModel model, GenomeAddress address, double target,
                                      int minCount, int maxCount, boolean negative) {
@@ -677,13 +854,14 @@ final class GenomeSynthesizer {
             insertGeneratedAtSafeBoundary(block, random, null);
         }
 
-        void insertGeneratedAtSafeBoundary(BitSequence block, GenomeRandom random, GenomeAddress owner) {
+        int insertGeneratedAtSafeBoundary(BitSequence block, GenomeRandom random, GenomeAddress owner) {
             Objects.requireNonNull(block, "block");
             if (block.bitLength() == 0) throw new IllegalArgumentException("generated block must not be empty");
             int position = randomSafeBoundary(random);
             bits = bits.insert(position, block);
             shiftAfterInsertion(position, block.bitLength());
             generatedIntervals.add(new GeneratedInterval(position, position + block.bitLength(), owner));
+            return position;
         }
 
         void removeGeneratedBlocks(GenomeAddress owner) {
