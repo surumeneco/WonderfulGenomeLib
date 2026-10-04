@@ -32,7 +32,7 @@ final class StructuralMutationBatch {
 
     record Replace(int chromosome, int start, int end, TrackedSequence payload) implements Edit {
         Replace {
-            if (chromosome < 0 || start < 0 || end <= start) throw new IllegalArgumentException("invalid replacement interval");
+            if (chromosome < 0 || start < 0 || end < start) throw new IllegalArgumentException("invalid replacement interval");
             Objects.requireNonNull(payload, "payload");
         }
         @Override public int coordinate() { return start; }
@@ -107,15 +107,27 @@ final class StructuralMutationBatch {
 
     private static boolean conflicts(Edit a, Edit b) {
         if (a.chromosome() != b.chromosome()) return false;
-        if (a instanceof Insert ia && b instanceof Insert ib) return ia.position() == ib.position();
-        if (a instanceof Insert ia) return insertionConflicts(ia.position(), b);
-        if (b instanceof Insert ib) return insertionConflicts(ib.position(), a);
+        boolean aPoint = isPointEdit(a);
+        boolean bPoint = isPointEdit(b);
+        if (aPoint && bPoint) return pointPosition(a) == pointPosition(b);
+        if (aPoint) return pointConflicts(pointPosition(a), b);
+        if (bPoint) return pointConflicts(pointPosition(b), a);
         int aStart = start(a), aEnd = end(a);
         int bStart = start(b), bEnd = end(b);
         return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
     }
 
-    private static boolean insertionConflicts(int position, Edit interval) {
+    private static boolean isPointEdit(Edit edit) {
+        return edit instanceof Insert || edit instanceof Replace replace && replace.start() == replace.end();
+    }
+
+    private static int pointPosition(Edit edit) {
+        if (edit instanceof Insert insert) return insert.position();
+        if (edit instanceof Replace replace && replace.start() == replace.end()) return replace.start();
+        throw new IllegalArgumentException("edit is not point-like");
+    }
+
+    private static boolean pointConflicts(int position, Edit interval) {
         return position > start(interval) && position < end(interval);
     }
 
