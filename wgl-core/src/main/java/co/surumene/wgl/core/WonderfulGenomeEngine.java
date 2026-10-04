@@ -9,6 +9,7 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
     private WonderfulGenomeEngine(EngineConfig config){this.config=Objects.requireNonNull(config);decoder=new GenomeDecoderEngine(config);synthesizer=new GenomeSynthesizer(config,decoder);breeding=new BreedingEngine(config,decoder);}
     public static WonderfulGenomeEngine create(EngineConfig config){return new WonderfulGenomeEngine(config);}
     public EngineConfig config(){return config;}
+    @Override public GenomeRandom standardRandom(long seed){return new SplitMix64GenomeRandom(seed);}
     @Override public <P> DecodeResult<P> decode(GenomeProfile<P> profile,DiploidGenome genome){return decoder.decode(profile,genome);}
     @Override public SynthesisResult synthesize(GenomeProfile<?> profile,BackboneDefinition backbone,SynthesisTarget target,SynthesisContext context,GenomeRandom random){return synthesizer.synthesize(profile,backbone,target,context,random);}
     @Override public CompatibilityReport assessCompatibility(DiploidGenome a,DiploidGenome b,CompatibilityPolicy policy){return (policy!=null?policy:new HomologyCompatibilityPolicyV1(config)).assess(a,b);}
