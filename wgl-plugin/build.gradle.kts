@@ -16,6 +16,10 @@ val verifyStandalonePluginJar by tasks.registering {
         check(contents.matching { include("co/surumene/wgl/plugin/WonderfulGenomeLibPlugin.class") }.files.isNotEmpty()) {
             "plugin JAR does not contain wgl-plugin"
         }
+        val pluginYml = zipTree(jarFile).matching { include("plugin.yml") }.singleFile.readText()
+        check(!pluginYml.contains("\${version}")) {
+            "plugin.yml version placeholder was not expanded"
+        }
     }
 }
 
