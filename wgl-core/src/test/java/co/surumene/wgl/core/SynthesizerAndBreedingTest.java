@@ -35,7 +35,7 @@ class SynthesizerAndBreedingTest {
                 profile, backbone, new BasicSynthesisTarget(java.util.Map.of(address, 0.50)),
                 context, new SplitMix64GenomeRandom(444));
 
-        SynthesisResult.Success success = assertInstanceOf(SynthesisResult.Success.class, result);
+        SynthesisResult.Success success = assertInstanceOf(SynthesisResult.Success.class, result, result.toString());
         assertEquals(0.50,
                 engine.decode(profile, success.genome()).decodedGenome().aggregate(address).score(),
                 EngineConfig.defaults().synthesizer().convergenceTolerance());
