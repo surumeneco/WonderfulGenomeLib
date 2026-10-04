@@ -42,14 +42,11 @@ class BinaryGenomeCodecTest {
     }
 
     @Test
-    void rejectsEncodingChromosomePairCountAboveUnsignedShortRange() {
+    void modelRejectsChromosomePairCountAboveUnsignedShortRangeBeforeEncoding() {
         ChromosomePair pair = new ChromosomePair(BitSequence.empty(), BitSequence.empty());
-        DiploidGenome tooMany = new DiploidGenome(
-                1, java.util.Collections.nCopies(0x10000, pair));
 
-        BinaryGenomeCodecV1 codec = new BinaryGenomeCodecV1();
-
-        assertThrows(IllegalArgumentException.class, () -> codec.encode(tooMany));
+        assertThrows(IllegalArgumentException.class, () -> new DiploidGenome(
+                1, java.util.Collections.nCopies(0x10000, pair)));
     }
 
 
