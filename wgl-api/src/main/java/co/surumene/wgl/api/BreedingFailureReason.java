@@ -1,0 +1,9 @@
+package co.surumene.wgl.api;
+
+public enum BreedingFailureReason {
+    CHROMOSOME_COUNT_MISMATCH,
+    INSUFFICIENT_CROSS_PARENT_HOMOLOGY,
+    CONSTRAINT_UNSATISFIABLE,
+    INVALID_PARENT_STRUCTURE,
+    SAFETY_REJECTED
+}

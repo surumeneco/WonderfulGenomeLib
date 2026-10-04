@@ -1,0 +1,7 @@
+name: WonderfulGenomeLib
+version: '${version}'
+main: co.surumene.wgl.plugin.WonderfulGenomeLibPlugin
+api-version: '26.2'
+author: surumeneco
+description: Paper-independent physical genome engine and profile service for XPlayServer plugins.
+website: https://github.com/surumeneco/WonderfulGenomeLib
