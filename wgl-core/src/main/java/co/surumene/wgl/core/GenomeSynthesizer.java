@@ -52,9 +52,9 @@ final class GenomeSynthesizer {
 
                 DirectContributionModel model = profile.contributionModel(address);
                 GenePlan positive = bestPlan(model, address, synthesisPlan.positiveSaturation(),
-                        synthesisPlan.minPositiveGenes(), synthesisPlan.maxPositiveGenes());
+                        synthesisPlan.minPositiveGenes(), synthesisPlan.maxPositiveGenes(), false);
                 GenePlan negative = bestPlan(model, address, synthesisPlan.negativeSaturation(),
-                        synthesisPlan.minNegativeGenes(), synthesisPlan.maxNegativeGenes());
+                        synthesisPlan.minNegativeGenes(), synthesisPlan.maxNegativeGenes(), true);
                 if (positive == null || negative == null) {
                     unsatisfiable = true;
                     break;
@@ -154,7 +154,7 @@ final class GenomeSynthesizer {
             double desiredSaturation = currentSaturation + desiredDelta;
 
             DirectContributionModel model = profile.contributionModel(address);
-            int magnitude = bestAdjustmentMagnitude(model, address, currentSaturation, desiredSaturation);
+            int magnitude = bestAdjustmentMagnitude(model, address, currentSaturation, desiredSaturation, negative);
             if (magnitude <= 0) break;
 
             BitSequence extension = Objects.requireNonNull(
@@ -233,11 +233,12 @@ final class GenomeSynthesizer {
     private static int bestAdjustmentMagnitude(DirectContributionModel model,
                                                GenomeAddress address,
                                                double currentSaturation,
-                                               double desiredSaturation) {
+                                               double desiredSaturation,
+                                               boolean negative) {
         int bestMagnitude = 0;
         double bestError = StrictMath.abs(currentSaturation - desiredSaturation);
         for (int magnitude = 1; magnitude <= 127; magnitude++) {
-            double candidateU = u(model, address, magnitude);
+            double candidateU = u(model, address, negative, magnitude);
             double predicted = 1.0 - (1.0 - currentSaturation) * (1.0 - candidateU);
             double error = StrictMath.abs(predicted - desiredSaturation);
             if (error < bestError) {
@@ -252,7 +253,7 @@ final class GenomeSynthesizer {
                             double targetSaturation, double absoluteError) {}
 
     private static GenePlan bestPlan(DirectContributionModel model, GenomeAddress address, double target,
-                                     int minCount, int maxCount) {
+                                     int minCount, int maxCount, boolean negative) {
         if (target <= 0.0) return GenePlan.empty();
         GenePlan best = null;
         for (int count = minCount; count <= maxCount; count++) {
@@ -276,8 +277,9 @@ final class GenomeSynthesizer {
         return best;
     }
 
-    private static double u(DirectContributionModel model, GenomeAddress address, int magnitude) {
-        double d = model.baseEffect(address, false, magnitude, 15);
+    private static double u(DirectContributionModel model, GenomeAddress address,
+                            boolean negative, int magnitude) {
+        double d = model.baseEffect(address, negative, magnitude, 15);
         return model.saturation(address, StrictMath.abs(d));
     }
 
