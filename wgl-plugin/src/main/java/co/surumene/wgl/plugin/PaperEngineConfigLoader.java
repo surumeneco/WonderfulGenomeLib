@@ -71,7 +71,7 @@ final class PaperEngineConfigLoader {
                 new EngineConfig.Synthesizer(
                         requiredDouble(c, "engine.synthesizer.convergence-tolerance"),
                         requiredInt(c, "engine.synthesizer.local-adjustment-max-iterations"),
-                        requiredDouble(c, "engine.synthesizer.micro-correction-max-ratio")),
+                        requiredDouble(c, "engine.synthesizer.local-adjustment-max-contribution-ratio")),
                 requiredInt(c, "engine.event-retry-max"));
     }
 
