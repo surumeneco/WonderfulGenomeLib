@@ -244,9 +244,15 @@ final class GenomeSynthesizer {
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
             return new SynthesisResult.Success(regeneratedGenome, regeneratedDecoded);
         }
-        return locallyAdjust(
+
+        SynthesisResult.Success adjusted = locallyAdjust(
                 profile, backbone, target, synthesisPlans,
                 trialA, trialB, regeneratedDecoded, random);
+        if (adjusted != null) return adjusted;
+
+        return regenerateProblematicAddress(
+                profile, backbone, target, context, synthesisPlans,
+                trialA, trialB, random);
     }
 
     private static boolean placeAddressPlan(GenomeProfile<?> profile,
