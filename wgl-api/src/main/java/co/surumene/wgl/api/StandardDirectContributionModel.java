@@ -1,7 +1,7 @@
 package co.surumene.wgl.api;
 
 /**
- * Reusable direct-effect model used by the current WWW profile: d0 = sign * alpha * m^gamma * e.
+ * Reusable standard direct-effect model: d0 = sign * alpha * m^gamma * e.
  * Saturation factor remains configurable per profile/address.
  */
 public final class StandardDirectContributionModel implements DirectContributionModel {
