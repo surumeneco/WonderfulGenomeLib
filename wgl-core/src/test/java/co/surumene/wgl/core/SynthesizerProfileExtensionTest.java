@@ -21,10 +21,6 @@ class SynthesizerProfileExtensionTest {
                 return address.equals(candidate);
             }
 
-            @Override public int minimumExtensionBits(GenomeAddress candidate) {
-                return address.equals(candidate) ? 16 : 0;
-            }
-
             @Override public BitSequence synthesisExtension(GenomeAddress candidate,
                                                             SynthesisTarget target,
                                                             GenomeRandom random) {
@@ -52,4 +48,37 @@ class SynthesizerProfileExtensionTest {
                 .filter(g -> address.equals(g.address()))
                 .allMatch(g -> expectedExtension.equals(g.extension())));
     }
+    @Test
+    void formatRequiredExtensionCannotBeOmittedByProfile() {
+        GenomeAddress address = new GenomeAddress(0x02, 0x00);
+        GenomeProfile<DecodedGenome> profile = new GenomeProfile<>() {
+            @Override public ProfileDescriptor descriptor() {
+                return new ProfileDescriptor("missing-format-extension", 1, new byte[32]);
+            }
+            @Override public boolean isDefinedAddress(GenomeAddress candidate) {
+                return address.equals(candidate);
+            }
+            @Override public BitSequence synthesisExtension(GenomeAddress candidate,
+                                                            SynthesisTarget target,
+                                                            GenomeRandom random) {
+                return BitSequence.empty();
+            }
+            @Override public DirectContributionModel contributionModel(GenomeAddress candidate) {
+                return StandardDirectContributionModel.defaultModel();
+            }
+            @Override public DecodedGenome mapPhenotype(DecodedGenome decodedGenome) {
+                return decodedGenome;
+            }
+        };
+
+        WonderfulGenomeEngine engine = WonderfulGenomeEngine.create(EngineConfig.defaults());
+
+        assertThrows(IllegalStateException.class, () -> engine.synthesize(
+                profile,
+                TestBackbones.singlePair(2048),
+                new BasicSynthesisTarget(Map.of(address, 0.30)),
+                SynthesisContext.defaults(),
+                new SplitMix64GenomeRandom(2027)));
+    }
+
 }
