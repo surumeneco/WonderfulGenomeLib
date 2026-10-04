@@ -58,11 +58,12 @@ class ProfileSpecificSynthesisPlanTest {
                 engine.synthesize(profile, TestBackbones.singlePair(2048), target,
                         SynthesisContext.defaults(), new SplitMix64GenomeRandom(99)));
 
-        AddressAggregate aggregate = engine.decode(profile, success.genome()).decodedGenome().aggregate(address);
+        DecodeResult<Double> decoded = engine.decode(profile, success.genome());
+        AddressAggregate aggregate = decoded.decodedGenome().aggregate(address);
         assertEquals(0.0, aggregate.positiveSaturation(), 1.0e-12);
         assertEquals(0.50, 1.0 - aggregate.negativeSurvival(), 0.002);
-        assertEquals(targetScore, success.decoded().phenotype(), 0.002);
-        assertTrue(success.decoded().decodedGenome().physicalGenes().stream()
+        assertEquals(targetScore, decoded.phenotype(), 0.002);
+        assertTrue(decoded.decodedGenome().physicalGenes().stream()
                 .anyMatch(g -> address.equals(g.address()) && g.negative()));
     }
 }
