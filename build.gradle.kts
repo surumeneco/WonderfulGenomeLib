@@ -47,6 +47,7 @@ project(":wgl-plugin") {
         "api"(project(":wgl-api"))
         "implementation"(project(":wgl-core"))
         "compileOnly"("io.papermc.paper:paper-api:26.2.build.129-stable")
+        "testImplementation"("io.papermc.paper:paper-api:26.2.build.129-stable")
     }
 
     tasks.named<ProcessResources>("processResources") {
