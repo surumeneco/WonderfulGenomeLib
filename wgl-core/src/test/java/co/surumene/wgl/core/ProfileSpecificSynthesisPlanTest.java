@@ -36,7 +36,7 @@ class ProfileSpecificSynthesisPlanTest {
             @Override public Double mapPhenotype(DecodedGenome decoded) {
                 AddressAggregate aggregate = decoded.aggregate(address);
                 double q = 1.0 - aggregate.negativeSurvival();
-                return 0.5 + 0.5 * (aggregate.positiveAccumulator() - q);
+                return 0.5 + 0.5 * (aggregate.positiveSaturation() - q);
             }
         };
 
@@ -48,7 +48,7 @@ class ProfileSpecificSynthesisPlanTest {
             @Override public boolean isSatisfied(DecodedGenome decoded, double tolerance) {
                 AddressAggregate aggregate = decoded.aggregate(address);
                 double q = 1.0 - aggregate.negativeSurvival();
-                double score = 0.5 + 0.5 * (aggregate.positiveAccumulator() - q);
+                double score = 0.5 + 0.5 * (aggregate.positiveSaturation() - q);
                 return StrictMath.abs(score - targetScore) <= tolerance;
             }
         };
@@ -59,10 +59,10 @@ class ProfileSpecificSynthesisPlanTest {
                         SynthesisContext.defaults(), new SplitMix64GenomeRandom(99)));
 
         AddressAggregate aggregate = engine.decode(profile, success.genome()).decodedGenome().aggregate(address);
-        assertEquals(0.0, aggregate.positiveAccumulator(), 1.0e-12);
+        assertEquals(0.0, aggregate.positiveSaturation(), 1.0e-12);
         assertEquals(0.50, 1.0 - aggregate.negativeSurvival(), 0.002);
-        assertEquals(targetScore, success.decodeResult().phenotype(), 0.002);
-        assertTrue(success.decodeResult().decodedGenome().physicalGenes().stream()
+        assertEquals(targetScore, success.decoded().phenotype(), 0.002);
+        assertTrue(success.decoded().decodedGenome().physicalGenes().stream()
                 .anyMatch(g -> address.equals(g.address()) && g.negative()));
     }
 }
