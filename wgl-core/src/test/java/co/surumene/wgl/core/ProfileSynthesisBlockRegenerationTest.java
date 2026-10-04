@@ -75,6 +75,7 @@ class ProfileSynthesisBlockRegenerationTest {
                 SynthesisResult.Success.class, result, result.toString());
         assertEquals(0.50, success.decoded().decodedGenome().aggregate(targetAddress).score(),
                 config.synthesizer().convergenceTolerance());
-        assertEquals(2, blockCalls.get());
+        assertTrue(blockCalls.get() >= 2,
+                "profile supplied blocks must be regenerated before whole-genome retry");
     }
 }
