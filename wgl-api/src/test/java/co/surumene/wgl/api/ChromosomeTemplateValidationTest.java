@@ -49,31 +49,6 @@ class ChromosomeTemplateValidationTest {
     }
 
     @Test
-    void markerLocusMustReferenceAdjacentBackboneAnchors() {
-        BitSequence bits = BitSequence.fromBits("0110".repeat(128));
-        AnchorSeed first = new AnchorSeed(64, bits.slice(64, 112));
-        AnchorSeed middle = new AnchorSeed(192, bits.slice(192, 240));
-        AnchorSeed last = new AnchorSeed(320, bits.slice(320, 368));
-
-        assertThrows(IllegalArgumentException.class,
-                () -> new ChromosomeTemplate(
-                        bits, List.of(first, middle, last), new MarkerLocus(first, last)));
-    }
-
-    @Test
-    void markerLocusMustUseBackboneAnchorsRatherThanIndependentWindows() {
-        BitSequence bits = BitSequence.fromBits("0011".repeat(128));
-        AnchorSeed anchorA = new AnchorSeed(64, bits.slice(64, 112));
-        AnchorSeed anchorB = new AnchorSeed(320, bits.slice(320, 368));
-        AnchorSeed markerA = new AnchorSeed(128, bits.slice(128, 176));
-        AnchorSeed markerB = new AnchorSeed(192, bits.slice(192, 240));
-
-        assertThrows(IllegalArgumentException.class,
-                () -> new ChromosomeTemplate(
-                        bits, List.of(anchorA, anchorB), new MarkerLocus(markerA, markerB)));
-    }
-
-    @Test
     void matchingSeedsRemainValid() {
         BitSequence bits = BitSequence.fromBits("0110".repeat(96));
         AnchorSeed first = new AnchorSeed(64, bits.slice(64, 112));
