@@ -31,6 +31,14 @@ public interface GenomeProfile<P> {
     }
 
     /**
+     * Optional Founder-only structural safety policy. Physical chromosome length safety remains
+     * the BackboneDefinition GenomeSafetyPolicy responsibility.
+     */
+    default SynthesisSafetyPolicy synthesisSafetyPolicy() {
+        return SynthesisSafetyPolicy.allowAll();
+    }
+
+    /**
      * Build the profile-owned extension payload for a synthesized direct gene.
      * Implementations must return between minimumExtensionBits(address) and 64 bits.
      */
