@@ -69,7 +69,7 @@ final class GenomeSynthesizer {
                     BitSequence extension = Objects.requireNonNull(
                             profile.synthesisExtension(spec.address(), target, random),
                             "profile synthesisExtension returned null");
-                    int minimumExtension = profile.minimumExtensionBits(spec.address());
+                    int minimumExtension = GenomeFormatV1.minimumExtensionBits(spec.address(), profile);
                     if (minimumExtension < 0 || minimumExtension > 64
                             || extension.bitLength() < minimumExtension || extension.bitLength() > 64) {
                         throw new IllegalStateException("invalid synthesis extension length for " + spec.address()
@@ -160,7 +160,7 @@ final class GenomeSynthesizer {
             BitSequence extension = Objects.requireNonNull(
                     profile.synthesisExtension(address, target, random),
                     "profile synthesisExtension returned null");
-            int minimumExtension = profile.minimumExtensionBits(address);
+            int minimumExtension = GenomeFormatV1.minimumExtensionBits(address, profile);
             if (minimumExtension < 0 || minimumExtension > 64
                     || extension.bitLength() < minimumExtension || extension.bitLength() > 64) {
                 throw new IllegalStateException("invalid synthesis extension length for " + address
