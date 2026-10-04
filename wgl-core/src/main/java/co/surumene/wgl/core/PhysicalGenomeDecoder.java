@@ -41,7 +41,7 @@ public final class PhysicalGenomeDecoder {
             Secded22.Decoded decoded=Secded22.decode(header);
             GenomeAddress address=decoded.valid()?decoded.address():null;
             boolean meaningful=decoded.valid() && isKnownAddress(address,profile);
-            int minExt=meaningful?minimumExtension(address,profile):0;
+            int minExt=meaningful?GenomeFormatV1.minimumExtensionBits(address,profile):0;
             int selectedExt=-1, endHam=0;
             for(int ext=minExt;ext<=64;ext++){
                 int endStart=core+34+ext;
@@ -66,10 +66,6 @@ public final class PhysicalGenomeDecoder {
         if(a==null||a.target()==0xFF||a.type()==0xFF)return false;
         if(a.type()==0x08)return a.target()<=0x0D;
         return profile.isDefinedAddress(a);
-    }
-    private static int minimumExtension(GenomeAddress a,GenomeProfile<?> profile){
-        if(a.type()==0x08){return switch(a.target()){case 0x02,0x03,0x06->22;case 0x0C,0x0D->52;default->0;};}
-        return Math.max(0,Math.min(64,profile.minimumExtensionBits(a)));
     }
     private static int hammingWindow(BitSequence seq,int offset,BitSequence motif){
         if(offset<0||offset+motif.bitLength()>seq.bitLength())return Integer.MAX_VALUE;
