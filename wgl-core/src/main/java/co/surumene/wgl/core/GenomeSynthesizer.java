@@ -65,8 +65,17 @@ final class GenomeSynthesizer {
                 shuffle(genes, random);
 
                 for (GeneSpec spec : genes) {
+                    BitSequence extension = Objects.requireNonNull(
+                            profile.synthesisExtension(spec.address(), target, random),
+                            "profile synthesisExtension returned null");
+                    int minimumExtension = profile.minimumExtensionBits(spec.address());
+                    if (minimumExtension < 0 || minimumExtension > 64
+                            || extension.bitLength() < minimumExtension || extension.bitLength() > 64) {
+                        throw new IllegalStateException("invalid synthesis extension length for " + spec.address()
+                                + ": " + extension.bitLength() + " bits, minimum=" + minimumExtension);
+                    }
                     BitSequence gene = GeneCodecV1.encode(spec.address(), spec.negative(), spec.magnitude(), 15,
-                            BitSequence.empty());
+                            extension);
                     BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
                     BitSequence block = spacer.concat(gene);
                     int chromosome = weightedChromosome(backbone, random);
