@@ -81,6 +81,10 @@ final class GenomeSynthesizer {
             SynthesisResult.Success adjusted = locallyAdjust(
                     profile, backbone, target, synthesisPlans, a, b, decoded, random);
             if (adjusted != null) return adjusted;
+
+            SynthesisResult.Success regenerated = regenerateProblematicAddress(
+                    profile, backbone, target, context, synthesisPlans, a, b, random);
+            if (regenerated != null) return regenerated;
         }
         if (sawSafetyRejection && !sawSafeCandidate) {
             return new SynthesisResult.Failure(SynthesisFailureReason.SAFETY_REJECTED,
@@ -142,7 +146,7 @@ final class GenomeSynthesizer {
             BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
             int chromosome = weightedChromosome(backbone, random);
             MutableScaffold scaffold = random.nextBoolean() ? a.get(chromosome) : b.get(chromosome);
-            scaffold.insertAtSafeBoundary(spacer.concat(gene), random);
+            scaffold.insertGeneratedAtSafeBoundary(spacer.concat(gene), random, address);
 
             DiploidGenome genome = currentGenome(backbone, a, b);
             if (!safeDiploid(backbone, genome)) break;
@@ -158,6 +162,47 @@ final class GenomeSynthesizer {
         DecodeResult<?> finalDecoded = decoder.decode(profile, genome);
         return target.isSatisfied(finalDecoded.decodedGenome(), tolerance)
                 ? new SynthesisResult.Success(genome, finalDecoded) : null;
+    }
+
+    private SynthesisResult.Success regenerateProblematicAddress(
+            GenomeProfile<?> profile,
+            BackboneDefinition backbone,
+            SynthesisTarget target,
+            SynthesisContext context,
+            Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans,
+            List<MutableScaffold> a,
+            List<MutableScaffold> b,
+            GenomeRandom random) {
+        double tolerance = config.synthesizer().convergenceTolerance();
+        DiploidGenome currentGenome = currentGenome(backbone, a, b);
+        if (!safeDiploid(backbone, currentGenome)) return null;
+
+        DecodeResult<?> currentDecoded = decoder.decode(profile, currentGenome);
+        Residual residual = largestResidual(synthesisPlans, currentDecoded.decodedGenome(), tolerance);
+        if (residual == null) return null;
+
+        GenomeAddress address = residual.address();
+        Double targetScore = target.continuousTargets().get(address);
+        if (targetScore == null) return null;
+
+        for (MutableScaffold scaffold : a) scaffold.removeGeneratedBlocks(address);
+        for (MutableScaffold scaffold : b) scaffold.removeGeneratedBlocks(address);
+
+        SynthesisAddressPlan replacement = Objects.requireNonNull(
+                profile.synthesisPlan(address, targetScore, context, random),
+                "profile synthesisPlan returned null");
+        if (!placeAddressPlan(profile, backbone, target, address, replacement, a, b, random)) {
+            return null;
+        }
+        synthesisPlans.put(address, replacement);
+
+        DiploidGenome regeneratedGenome = currentGenome(backbone, a, b);
+        if (!safeDiploid(backbone, regeneratedGenome)) return null;
+        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
+        if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
+            return new SynthesisResult.Success(regeneratedGenome, regeneratedDecoded);
+        }
+        return locallyAdjust(profile, backbone, target, synthesisPlans, a, b, regeneratedDecoded, random);
     }
 
     private static boolean placeAddressPlan(GenomeProfile<?> profile,
