@@ -116,7 +116,7 @@ final class GenomeSynthesizer {
                                                         GenomeRandom random) {
         DecodeResult<?> decoded = initial;
         double tolerance = config.synthesizer().convergenceTolerance();
-        double maxRatio = config.synthesizer().microCorrectionMaxRatio();
+        double maxRatio = config.synthesizer().localAdjustmentMaxContributionRatio();
 
         for (int iteration = 0; iteration < config.synthesizer().localAdjustmentMaxIterations(); iteration++) {
             if (target.isSatisfied(decoded.decodedGenome(), tolerance)) {
