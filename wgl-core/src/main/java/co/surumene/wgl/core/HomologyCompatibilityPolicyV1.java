@@ -7,6 +7,10 @@ public final class HomologyCompatibilityPolicyV1 implements CompatibilityPolicy 
     private final HomologyEngine homology;
     public HomologyCompatibilityPolicyV1(EngineConfig config){homology=new HomologyEngine(config);}
     @Override public CompatibilityReport assess(DiploidGenome a,DiploidGenome b){
+        Objects.requireNonNull(a,"a");Objects.requireNonNull(b,"b");
+        if(a.genomeFormatVersion()!=WonderfulGenomeEngine.GENOME_FORMAT_VERSION
+                || b.genomeFormatVersion()!=WonderfulGenomeEngine.GENOME_FORMAT_VERSION)
+            throw new IllegalArgumentException("HomologyCompatibilityPolicyV1 supports Genome Format V1 only");
         if(a.chromosomePairCount()!=b.chromosomePairCount())return new CompatibilityReport(false,"CHROMOSOME_COUNT_MISMATCH",List.of());
         List<Boolean> flags=new ArrayList<>();boolean all=true;
         for(int i=0;i<a.chromosomePairCount();i++){
