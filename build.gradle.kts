@@ -2,10 +2,10 @@ plugins {
     base
 }
 
-group = "co.surumene"
-version = "0.1.0-SNAPSHOT"
-
 allprojects {
+    group = "co.surumene"
+    version = "0.1.0-SNAPSHOT"
+
     repositories {
         mavenCentral()
         maven("https://repo.papermc.io/repository/maven-public/")
@@ -47,5 +47,19 @@ project(":wgl-plugin") {
         "api"(project(":wgl-api"))
         "implementation"(project(":wgl-core"))
         "compileOnly"("io.papermc.paper:paper-api:26.2.build.129-stable")
+    }
+
+    tasks.named<ProcessResources>("processResources") {
+        filteringCharset = "UTF-8"
+        filesMatching("plugin.yml") {
+            expand("version" to project.version)
+        }
+    }
+
+    tasks.named<Jar>("jar") {
+        dependsOn(":wgl-api:classes", ":wgl-core:classes")
+        archiveBaseName.set("WonderfulGenomeLib")
+        from(project(":wgl-api").layout.buildDirectory.dir("classes/java/main"))
+        from(project(":wgl-core").layout.buildDirectory.dir("classes/java/main"))
     }
 }

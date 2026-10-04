@@ -1,0 +1,21 @@
+package co.surumene.wgl.core;
+
+import co.surumene.wgl.api.*;
+import java.util.Objects;
+
+public final class WonderfulGenomeEngine implements GenomeEngine {
+    public static final int ENGINE_REVISION=1;
+    private final EngineConfig config;private final BinaryGenomeCodecV1 codec=new BinaryGenomeCodecV1();private final GenomeDecoderEngine decoder;private final GenomeSynthesizer synthesizer;private final BreedingEngine breeding;private final MarkerEngine marker=new MarkerEngine();private final GenomeSequenceCodec sequenceCodec=new GenomeSequenceCodecV1();
+    private WonderfulGenomeEngine(EngineConfig config){this.config=Objects.requireNonNull(config);decoder=new GenomeDecoderEngine(config);synthesizer=new GenomeSynthesizer(config,decoder);breeding=new BreedingEngine(config,decoder);}
+    public static WonderfulGenomeEngine create(EngineConfig config){return new WonderfulGenomeEngine(config);}
+    public EngineConfig config(){return config;}
+    @Override public <P> DecodeResult<P> decode(GenomeProfile<P> profile,DiploidGenome genome){return decoder.decode(profile,genome);}
+    @Override public SynthesisResult synthesize(GenomeProfile<?> profile,BackboneDefinition backbone,SynthesisTarget target,SynthesisContext context,GenomeRandom random){return synthesizer.synthesize(profile,backbone,target,context,random);}
+    @Override public CompatibilityReport assessCompatibility(DiploidGenome a,DiploidGenome b,CompatibilityPolicy policy){return (policy!=null?policy:new HomologyCompatibilityPolicyV1(config)).assess(a,b);}
+    @Override public BreedingResult breed(GenomeProfile<?> profile,DiploidGenome a,DiploidGenome b,BreedingContext context,GenomeRandom random){return breeding.breed(profile,a,b,context,random);}
+    @Override public byte[] encode(DiploidGenome genome){return codec.encode(genome);}
+    @Override public DiploidGenome decodeBinary(byte[] bytes){return codec.decode(bytes);}
+    @Override public MarkerResult marker(BackboneDefinition backbone,DiploidGenome genome){return marker.marker(backbone,genome);}
+    @Override public MarkerResult marker(BackboneDefinition backbone,DiploidGenome genome,MarkerScheme scheme){return Objects.requireNonNull(scheme).marker(backbone,genome);}
+    @Override public GenomeSequenceCodec sequenceCodec(){return sequenceCodec;}
+}

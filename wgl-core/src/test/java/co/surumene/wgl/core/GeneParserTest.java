@@ -25,5 +25,6 @@ class GeneParserTest {
 
         BitSequence motifMutated = gene.flip(0);
         assertEquals(1, decoder.parseChromosome(motifMutated, profile).size());
+        assertEquals(motifMutated, motifMutated);
     }
 }

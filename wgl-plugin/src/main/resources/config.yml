@@ -1,0 +1,72 @@
+# Wonderful Genome Lib common engine configuration.
+# Consumer-specific Profile settings belong to the consumer plugin.
+config-version: 1
+
+engine:
+  homology:
+    max-anchor-gap-bits: 1024
+    q-local-window-bits: 64
+    q-local-decay: 8.0
+
+  recombination:
+    extra-crossover-start-bits: 4096
+    extra-crossover-scale-bits: 5120
+    interference-distance-bits: 384
+
+  mutation:
+    point-per-bit-probability: 0.000002
+    structural:
+      insertion-probability: 0.0015
+      deletion-probability: 0.0015
+      duplication-probability: 0.0010
+      inversion-probability: 0.0005
+      translocation-probability: 0.0003
+      insertion-random-sequence-ratio: 0.80
+      duplication-same-chromosome-ratio: 0.80
+      translocation-reciprocal-ratio: 0.25
+      translocation-other-chromosome-ratio: 0.75
+      insertion-length-p: 0.03125
+      insertion-length-max-bits: 1024
+      deletion-length-p: 0.03125
+      deletion-length-max-bits: 1024
+      duplication-length-p: 0.015625
+      duplication-length-max-bits: 2048
+      inversion-length-p: 0.015625
+      inversion-length-max-bits: 2048
+      translocation-length-p: 0.0078125
+      translocation-length-max-bits: 4096
+    nahr:
+      base-probability: 0.0005
+      structure-multiplier-max: 8.0
+
+  regulation:
+    final-multiplier-min: 0.20
+    final-multiplier-max: 3.00
+    strength-exponent: 3.0
+    cis-enhancer-max: 1.50
+    cis-silencer-min: 0.50
+    trans-enhancer-max: 1.25
+    trans-silencer-min: 0.75
+    epistasis-enhancer-max: 1.75
+    epistasis-silencer-min: 0.35
+
+  local-rate-regulation:
+    recombination-hotspot-max: 3.0
+    recombination-coldspot-min: 0.25
+    recombination-final-min: 0.10
+    recombination-final-max: 4.0
+    point-hotspot-max: 6.0
+    point-coldspot-min: 0.20
+    point-final-min: 0.10
+    point-final-max: 8.0
+    structural-hotspot-max: 4.0
+    structural-coldspot-min: 0.25
+    structural-final-min: 0.10
+    structural-final-max: 6.0
+
+  synthesizer:
+    convergence-tolerance: 0.002
+    local-adjustment-max-iterations: 128
+    micro-correction-max-ratio: 0.05
+
+  event-retry-max: 32

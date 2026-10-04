@@ -17,8 +17,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.1.0'
-      - run: gradle build --no-daemon
+      - run: gradle clean build --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: WonderfulGenomeLib
-          path: wgl-plugin/build/libs/*.jar
+          path: wgl-plugin/build/libs/WonderfulGenomeLib-*.jar
