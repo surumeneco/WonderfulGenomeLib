@@ -1,5 +1,7 @@
 package co.surumene.wgl.core;
 
+import co.surumene.wgl.api.GenomeRandom;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -16,6 +18,20 @@ final class RecombinationEventPlan {
 
     private RecombinationEventPlan(List<Boundary> boundaries) {
         this.boundaries = List.copyOf(boundaries);
+    }
+
+    static int normalCrossoverTargetCount(double meanLength,
+                                          EngineConfig.Recombination config,
+                                          GenomeRandom random) {
+        Objects.requireNonNull(config, "config");
+        Objects.requireNonNull(random, "random");
+        if (!Double.isFinite(meanLength) || meanLength < 0.0) {
+            throw new IllegalArgumentException("meanLength must be finite and >= 0");
+        }
+        double lambda = Math.max(0.0,
+                (meanLength - config.extraCrossoverStartBits())
+                        / config.extraCrossoverScaleBits());
+        return 1 + Sampling.poisson(lambda, random);
     }
 
     static RecombinationEventPlan withNahr(Boundary nahr, List<Boundary> normalBoundaries) {
