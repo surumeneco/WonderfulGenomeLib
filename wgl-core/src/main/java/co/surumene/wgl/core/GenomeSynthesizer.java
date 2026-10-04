@@ -346,6 +346,13 @@ final class GenomeSynthesizer {
         return r;
     }
 
+    private static BitSequence randomBits(int length, GenomeRandom random) {
+        if (length < 0) throw new IllegalArgumentException("length must be >= 0");
+        StringBuilder bits = new StringBuilder(length);
+        for (int i = 0; i < length; i++) bits.append(random.nextBoolean() ? '1' : '0');
+        return BitSequence.fromBits(bits.toString());
+    }
+
     private static BitSequence nonCodingSpacer(GenomeRandom random, int length) {
         for (int attempt = 0; attempt < 32; attempt++) {
             StringBuilder s = new StringBuilder(length);
