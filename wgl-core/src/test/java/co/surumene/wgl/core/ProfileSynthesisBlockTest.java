@@ -23,7 +23,7 @@ class ProfileSynthesisBlockTest {
             }
 
             @Override public DirectContributionModel contributionModel(GenomeAddress address) {
-                return new StandardDirectContributionModel();
+                return StandardDirectContributionModel.defaultModel();
             }
 
             @Override public List<SynthesisBlock> synthesisBlocks(
