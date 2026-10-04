@@ -22,6 +22,29 @@ class SynthesizerAndBreedingTest {
         assertEquals(0.62, decoded.decodedGenome().aggregate(address).score(), 0.002);
     }
 
+
+    @Test
+    void localAdjustmentCanConvergeBeyondInitialGeneCountRange() {
+        GenomeAddress address = new GenomeAddress(0x00, 0x03);
+        TestProfile profile = TestProfile.defining(address);
+        BackboneDefinition backbone = TestBackbones.singlePair(2048);
+        WonderfulGenomeEngine engine = WonderfulGenomeEngine.create(EngineConfig.defaults());
+        SynthesisContext context = new SynthesisContext(1, 1, 0.0, 0.0, 1);
+
+        SynthesisResult result = engine.synthesize(
+                profile, backbone, new BasicSynthesisTarget(java.util.Map.of(address, 0.50)),
+                context, new SplitMix64GenomeRandom(444));
+
+        SynthesisResult.Success success = assertInstanceOf(SynthesisResult.Success.class, result);
+        assertEquals(0.50,
+                engine.decode(profile, success.genome()).decodedGenome().aggregate(address).score(),
+                EngineConfig.defaults().synthesizer().convergenceTolerance());
+        long directGenes = engine.decode(profile, success.genome()).decodedGenome().physicalGenes().stream()
+                .filter(g -> address.equals(g.address()))
+                .count();
+        assertTrue(directGenes > 1, "local adjustment should add ordinary direct genes");
+    }
+
     @Test
     void breedingIsSeedReproducibleAndCountMismatchIsNormalFailure() {
         GenomeAddress address = new GenomeAddress(0x00, 0x00);
