@@ -91,10 +91,131 @@ final class GenomeSynthesizer {
             if (target.isSatisfied(decoded.decodedGenome(), config.synthesizer().convergenceTolerance())) {
                 return new SynthesisResult.Success(genome, decoded);
             }
+
+            SynthesisResult.Success adjusted = locallyAdjust(
+                    profile, backbone, target, a, b, decoded, random);
+            if (adjusted != null) return adjusted;
         }
         return new SynthesisResult.Failure(SynthesisFailureReason.CONVERGENCE_LIMIT,
                 "target did not converge within configured retries");
     }
+
+    private SynthesisResult.Success locallyAdjust(GenomeProfile<?> profile,
+                                                        BackboneDefinition backbone,
+                                                        SynthesisTarget target,
+                                                        List<MutableScaffold> a,
+                                                        List<MutableScaffold> b,
+                                                        DecodeResult<?> initial,
+                                                        GenomeRandom random) {
+        DecodeResult<?> decoded = initial;
+        double tolerance = config.synthesizer().convergenceTolerance();
+        double maxRatio = config.synthesizer().microCorrectionMaxRatio();
+
+        for (int iteration = 0; iteration < config.synthesizer().localAdjustmentMaxIterations(); iteration++) {
+            if (target.isSatisfied(decoded.decodedGenome(), tolerance)) {
+                DiploidGenome genome = currentGenome(backbone, a, b);
+                return new SynthesisResult.Success(genome, decoded);
+            }
+
+            Residual residual = largestResidual(target, decoded.decodedGenome(), tolerance);
+            if (residual == null) break;
+
+            GenomeAddress address = residual.address();
+            AddressAggregate aggregate = decoded.decodedGenome().aggregate(address);
+            boolean negative = residual.targetScore() < aggregate.score();
+            double baseAmount = Math.max(residual.targetScore(), aggregate.score());
+            double stepLimit = baseAmount * maxRatio;
+            if (!(stepLimit > 0.0)) stepLimit = Math.min(residual.absoluteError(), tolerance);
+            double desiredDelta = Math.min(residual.absoluteError(), stepLimit);
+            double desiredScore = negative
+                    ? aggregate.score() - desiredDelta
+                    : aggregate.score() + desiredDelta;
+
+            DirectContributionModel model = profile.contributionModel(address);
+            int magnitude = bestAdjustmentMagnitude(model, address, aggregate, desiredScore, negative);
+            if (magnitude <= 0) break;
+
+            BitSequence gene = GeneCodecV1.encode(address, negative, magnitude, 15, BitSequence.empty());
+            BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
+            int chromosome = weightedChromosome(backbone, random);
+            MutableScaffold scaffold = random.nextBoolean() ? a.get(chromosome) : b.get(chromosome);
+            scaffold.insertAtSafeBoundary(spacer.concat(gene), random);
+
+            DiploidGenome genome = currentGenome(backbone, a, b);
+            if (!safeDiploid(backbone, genome)) break;
+            DecodeResult<?> next = decoder.decode(profile, genome);
+            double nextError = totalError(target, next.decodedGenome());
+            double currentError = totalError(target, decoded.decodedGenome());
+            if (!(nextError < currentError)) break;
+            decoded = next;
+        }
+
+        DiploidGenome genome = currentGenome(backbone, a, b);
+        if (!safeDiploid(backbone, genome)) return null;
+        DecodeResult<?> finalDecoded = decoder.decode(profile, genome);
+        return target.isSatisfied(finalDecoded.decodedGenome(), tolerance)
+                ? new SynthesisResult.Success(genome, finalDecoded) : null;
+    }
+
+    private static DiploidGenome currentGenome(BackboneDefinition backbone,
+                                               List<MutableScaffold> a,
+                                               List<MutableScaffold> b) {
+        List<ChromosomePair> pairs = new ArrayList<>(a.size());
+        for (int i = 0; i < a.size(); i++) {
+            pairs.add(new ChromosomePair(a.get(i).bits(), b.get(i).bits()));
+        }
+        return new DiploidGenome(backbone.genomeFormatVersion(), pairs);
+    }
+
+    private static Residual largestResidual(SynthesisTarget target, DecodedGenome decoded, double tolerance) {
+        Residual best = null;
+        for (var entry : new TreeMap<>(target.continuousTargets()).entrySet()) {
+            double current = decoded.aggregate(entry.getKey()).score();
+            double error = StrictMath.abs(entry.getValue() - current);
+            if (error <= tolerance) continue;
+            if (best == null || error > best.absoluteError()) {
+                best = new Residual(entry.getKey(), entry.getValue(), error);
+            }
+        }
+        return best;
+    }
+
+    private static double totalError(SynthesisTarget target, DecodedGenome decoded) {
+        double total = 0.0;
+        for (var entry : target.continuousTargets().entrySet()) {
+            total += StrictMath.abs(entry.getValue() - decoded.aggregate(entry.getKey()).score());
+        }
+        return total;
+    }
+
+    private static int bestAdjustmentMagnitude(DirectContributionModel model,
+                                               GenomeAddress address,
+                                               AddressAggregate aggregate,
+                                               double desiredScore,
+                                               boolean negative) {
+        int bestMagnitude = 0;
+        double bestError = StrictMath.abs(aggregate.score() - desiredScore);
+        for (int magnitude = 1; magnitude <= 127; magnitude++) {
+            double candidateU = u(model, address, magnitude);
+            double predicted;
+            if (negative) {
+                predicted = aggregate.positiveSaturation()
+                        * aggregate.negativeSurvival() * (1.0 - candidateU);
+            } else {
+                double positive = 1.0
+                        - (1.0 - aggregate.positiveSaturation()) * (1.0 - candidateU);
+                predicted = positive * aggregate.negativeSurvival();
+            }
+            double error = StrictMath.abs(predicted - desiredScore);
+            if (error < bestError) {
+                bestError = error;
+                bestMagnitude = magnitude;
+            }
+        }
+        return bestMagnitude;
+    }
+
+    private record Residual(GenomeAddress address, double targetScore, double absoluteError) {}
 
     private static GenePlan bestPlan(DirectContributionModel model, GenomeAddress address, double target,
                                      int minCount, int maxCount) {
