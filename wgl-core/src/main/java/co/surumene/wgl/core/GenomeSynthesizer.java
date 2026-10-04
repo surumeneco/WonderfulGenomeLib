@@ -160,6 +160,45 @@ final class GenomeSynthesizer {
                 ? new SynthesisResult.Success(genome, finalDecoded) : null;
     }
 
+    private static boolean placeAddressPlan(GenomeProfile<?> profile,
+                                            BackboneDefinition backbone,
+                                            SynthesisTarget target,
+                                            GenomeAddress address,
+                                            SynthesisAddressPlan synthesisPlan,
+                                            List<MutableScaffold> a,
+                                            List<MutableScaffold> b,
+                                            GenomeRandom random) {
+        DirectContributionModel model = profile.contributionModel(address);
+        GenePlan positive = bestPlan(model, address, synthesisPlan.positiveSaturation(),
+                synthesisPlan.minPositiveGenes(), synthesisPlan.maxPositiveGenes(), false);
+        GenePlan negative = bestPlan(model, address, synthesisPlan.negativeSaturation(),
+                synthesisPlan.minNegativeGenes(), synthesisPlan.maxNegativeGenes(), true);
+        if (positive == null || negative == null) return false;
+
+        List<GeneSpec> genes = new ArrayList<>(positive.magnitudes().size() + negative.magnitudes().size());
+        for (int magnitude : positive.magnitudes()) genes.add(new GeneSpec(address, false, magnitude));
+        for (int magnitude : negative.magnitudes()) genes.add(new GeneSpec(address, true, magnitude));
+        shuffle(genes, random);
+
+        for (GeneSpec spec : genes) {
+            BitSequence extension = Objects.requireNonNull(
+                    profile.synthesisExtension(spec.address(), target, random),
+                    "profile synthesisExtension returned null");
+            int minimumExtension = GenomeFormatV1.minimumExtensionBits(spec.address(), profile);
+            if (minimumExtension < 0 || minimumExtension > 64
+                    || extension.bitLength() < minimumExtension || extension.bitLength() > 64) {
+                throw new IllegalStateException("invalid synthesis extension length for " + spec.address()
+                        + ": " + extension.bitLength() + " bits, minimum=" + minimumExtension);
+            }
+            BitSequence gene = GeneCodecV1.encode(spec.address(), spec.negative(), spec.magnitude(), 15, extension);
+            BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
+            int chromosome = weightedChromosome(backbone, random);
+            MutableScaffold scaffold = random.nextBoolean() ? a.get(chromosome) : b.get(chromosome);
+            scaffold.insertGeneratedAtSafeBoundary(spacer.concat(gene), random, address);
+        }
+        return true;
+    }
+
     private static void placeProfileBlocks(GenomeProfile<?> profile,
                                            BackboneDefinition backbone,
                                            SynthesisTarget target,
