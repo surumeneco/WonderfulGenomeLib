@@ -8,6 +8,9 @@ import java.util.*;
 public final class MarkerEngine implements MarkerScheme {
     @Override public MarkerResult marker(BackboneDefinition backbone,DiploidGenome genome){
         Objects.requireNonNull(backbone);Objects.requireNonNull(genome);
+        if(backbone.genomeFormatVersion()!=WonderfulGenomeEngine.GENOME_FORMAT_VERSION
+                || genome.genomeFormatVersion()!=WonderfulGenomeEngine.GENOME_FORMAT_VERSION)
+            throw new IllegalArgumentException("MarkerEngine V1 supports Genome Format V1 only");
         if(genome.chromosomePairCount()!=backbone.chromosomes().size())throw new IllegalArgumentException("chromosome count does not match backbone");
         List<Integer> segments=new ArrayList<>();
         for(int i=0;i<genome.chromosomePairCount();i++){
