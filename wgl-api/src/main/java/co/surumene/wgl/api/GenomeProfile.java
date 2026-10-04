@@ -20,6 +20,17 @@ public interface GenomeProfile<P> {
     }
 
     /**
+     * Supply additional physical Founder blocks for profile-specific latent/discrete targets,
+     * regulation structures, silent/incomplete genes, or other synthesis material.
+     * WGL owns physical placement and final canonical Decoder convergence.
+     */
+    default java.util.List<SynthesisBlock> synthesisBlocks(SynthesisTarget target,
+                                                           SynthesisContext context,
+                                                           GenomeRandom random) {
+        return java.util.List.of();
+    }
+
+    /**
      * Build the profile-owned extension payload for a synthesized direct gene.
      * Implementations must return between minimumExtensionBits(address) and 64 bits.
      */
