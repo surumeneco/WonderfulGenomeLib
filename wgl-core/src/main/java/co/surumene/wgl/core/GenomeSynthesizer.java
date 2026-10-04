@@ -520,10 +520,12 @@ final class GenomeSynthesizer {
         for (int chromosome = 0; chromosome < genome.chromosomePairs().size(); chromosome++) {
             ChromosomePair pair = genome.chromosomePairs().get(chromosome);
             for (int haplotype = 0; haplotype <= 1; haplotype++) {
-                BitSequence bits = haplotype == 0 ? pair.haplotypeA() : pair.haplotypeB();
+                int chromosomeIndex = chromosome;
+                int haplotypeIndex = haplotype;
+                BitSequence bits = haplotypeIndex == 0 ? pair.haplotypeA() : pair.haplotypeB();
                 List<DecodedGene> genes = decodedGenome.physicalGenes().stream()
-                        .filter(gene -> gene.chromosomeIndex() == chromosome
-                                && gene.haplotypeIndex() == haplotype)
+                        .filter(gene -> gene.chromosomeIndex() == chromosomeIndex
+                                && gene.haplotypeIndex() == haplotypeIndex)
                         .toList();
 
                 List<Interval> ranges = new ArrayList<>(genes.size());
@@ -538,8 +540,8 @@ final class GenomeSynthesizer {
                 }
 
                 metrics.add(new SynthesisHaplotypeMetrics(
-                        chromosome,
-                        haplotype,
+                        chromosomeIndex,
+                        haplotypeIndex,
                         bits.bitLength(),
                         genes.size(),
                         recognizableBits));
