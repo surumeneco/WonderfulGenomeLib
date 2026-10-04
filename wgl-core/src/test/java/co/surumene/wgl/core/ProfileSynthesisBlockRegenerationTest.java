@@ -44,7 +44,13 @@ class ProfileSynthesisBlockRegenerationTest {
                             0xFF,
                             15,
                             targetHeader);
-                    return List.of(SynthesisBlock.fixed(transSilencer, 0, 0));
+                    BitSequence strongSilencerBlock = transSilencer
+                            .concat(transSilencer)
+                            .concat(transSilencer)
+                            .concat(transSilencer)
+                            .concat(transSilencer)
+                            .concat(transSilencer);
+                    return List.of(SynthesisBlock.fixed(strongSilencerBlock, 0, 0));
                 }
                 return List.of(SynthesisBlock.fixed(BitSequence.fromBits("0"), 0, 0));
             }
