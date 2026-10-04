@@ -27,4 +27,20 @@ class GeneParserTest {
         assertEquals(1, decoder.parseChromosome(motifMutated, profile).size());
         assertEquals(motifMutated, motifMutated);
     }
+    @Test
+    void formatV1ReservesSixteenBitExtensionForType02Loci() {
+        GenomeAddress address = new GenomeAddress(0x02, 0x00);
+        TestProfile profile = TestProfile.defining(address);
+        PhysicalGenomeDecoder decoder = new PhysicalGenomeDecoder(EngineConfig.defaults());
+
+        BitSequence requiredPrefix = GeneCodecV1.END;
+        BitSequence gene = GeneCodecV1.encode(address, false, 64, 15, requiredPrefix);
+
+        var decoded = decoder.parseChromosome(gene, profile);
+
+        assertEquals(1, decoded.size());
+        assertEquals(requiredPrefix, decoded.getFirst().extension());
+        assertEquals(gene.bitLength(), decoded.getFirst().endBitExclusive());
+    }
+
 }
