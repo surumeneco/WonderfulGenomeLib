@@ -36,8 +36,8 @@ final class GenomeSynthesizer {
             List<MutableScaffold> a = new ArrayList<>();
             List<MutableScaffold> b = new ArrayList<>();
             for (ChromosomeTemplate template : backbone.chromosomes()) {
-                a.add(new MutableScaffold(template));
-                b.add(new MutableScaffold(template));
+                a.add(new MutableScaffold(template, sampleFounderLength(template, random), random));
+                b.add(new MutableScaffold(template, sampleFounderLength(template, random), random));
             }
 
             boolean unsatisfiable = false;
@@ -283,6 +283,47 @@ final class GenomeSynthesizer {
         return model.saturation(address, StrictMath.abs(d));
     }
 
+    private static int sampleFounderLength(ChromosomeTemplate template, GenomeRandom random) {
+        FounderScaffoldTolerance tolerance = template.founderScaffoldTolerance();
+        int baseline = template.templateBits().bitLength();
+        if (baseline == 0 || tolerance.exactLength()) return baseline;
+
+        double minimumRaw = tolerance.minLengthRatio() * baseline;
+        double maximumRaw = tolerance.maxLengthRatio() * baseline;
+        int minimum = Math.max(protectedBitCount(template), (int) StrictMath.ceil(minimumRaw));
+        int maximum = (int) StrictMath.floor(maximumRaw);
+        if (minimum > maximum) {
+            throw new IllegalArgumentException("founder scaffold tolerance cannot preserve protected anchor regions");
+        }
+
+        while (true) {
+            double sampled = baseline * (1.0
+                    + tolerance.standardDeviationRatio() * Sampling.standardGaussian(random));
+            if (!Double.isFinite(sampled) || sampled < minimumRaw || sampled > maximumRaw) continue;
+            long rounded = (long) StrictMath.floor(sampled + 0.5);
+            if (rounded < minimum || rounded > maximum || rounded > Integer.MAX_VALUE) continue;
+            return (int) rounded;
+        }
+    }
+
+    private static int protectedBitCount(ChromosomeTemplate template) {
+        List<Interval> intervals = new ArrayList<>();
+        for (AnchorSeed seed : template.anchors()) {
+            intervals.add(new Interval(seed.position(), seed.position() + 48));
+        }
+        if (template.markerLocus() != null) {
+            intervals.add(new Interval(template.markerLocus().first().position(),
+                    template.markerLocus().first().position() + 48));
+            intervals.add(new Interval(template.markerLocus().second().position(),
+                    template.markerLocus().second().position() + 48));
+        }
+        int total = 0;
+        for (Interval interval : MutableScaffold.merge(intervals)) {
+            total += interval.end() - interval.start();
+        }
+        return total;
+    }
+
     private static int weightedChromosome(BackboneDefinition backbone, GenomeRandom random) {
         long total = 0;
         for (ChromosomeTemplate t : backbone.chromosomes()) total += Math.max(1, t.templateBits().bitLength());
@@ -368,22 +409,116 @@ final class GenomeSynthesizer {
             this.protectedIntervals = merge(intervals);
         }
 
+        MutableScaffold(ChromosomeTemplate template, int targetLength, GenomeRandom random) {
+            this(template);
+            resizeTo(targetLength, random);
+        }
+
         BitSequence bits() { return bits; }
 
-        void insertAtSafeBoundary(BitSequence block, GenomeRandom random) {
-            int position = bits.bitLength();
-            for (int attempt = 0; attempt < 64; attempt++) {
-                int candidate = random.nextInt(bits.bitLength() + 1);
-                if (safe(candidate)) { position = candidate; break; }
+        private void resizeTo(int targetLength, GenomeRandom random) {
+            if (targetLength < 0) throw new IllegalArgumentException("targetLength must be >= 0");
+            if (targetLength == bits.bitLength()) return;
+            if (targetLength > bits.bitLength()) {
+                insertBackground(randomBits(targetLength - bits.bitLength(), random), random);
+                return;
             }
-            bits = bits.insert(position, block);
-            int delta = block.bitLength();
-            List<Interval> shifted = new ArrayList<>(protectedIntervals.size() + 1);
+            while (bits.bitLength() > targetLength) {
+                int excess = bits.bitLength() - targetLength;
+                List<Interval> gaps = removableIntervals();
+                int total = gaps.stream().mapToInt(x -> x.end() - x.start()).sum();
+                if (total < excess) {
+                    throw new IllegalArgumentException("founder target length cannot preserve protected anchor regions");
+                }
+                int roll = random.nextInt(total);
+                Interval selected = null;
+                for (Interval gap : gaps) {
+                    int length = gap.end() - gap.start();
+                    if (roll < length) {
+                        selected = gap;
+                        break;
+                    }
+                    roll -= length;
+                }
+                if (selected == null) throw new IllegalStateException("failed to choose removable scaffold interval");
+                int available = selected.end() - selected.start();
+                int amount = Math.min(excess, available);
+                int from = selected.start();
+                if (available > amount) {
+                    from += random.nextInt(available - amount + 1);
+                }
+                deleteBackground(from, from + amount);
+            }
+        }
+
+        private void insertBackground(BitSequence background, GenomeRandom random) {
+            if (background.bitLength() == 0) return;
+            int position = randomSafeBoundary(random);
+            bits = bits.insert(position, background);
+            shiftAfterInsertion(position, background.bitLength(), false);
+        }
+
+        private void deleteBackground(int from, int to) {
+            if (from < 0 || to <= from || to > bits.bitLength()) {
+                throw new IllegalArgumentException("invalid background deletion");
+            }
             for (Interval interval : protectedIntervals) {
-                if (position <= interval.start()) shifted.add(new Interval(interval.start() + delta, interval.end() + delta));
-                else shifted.add(interval);
+                if (Math.max(from, interval.start()) < Math.min(to, interval.end())) {
+                    throw new IllegalArgumentException("background deletion overlaps protected anchor region");
+                }
             }
-            shifted.add(new Interval(position, position + delta));
+            bits = bits.delete(from, to);
+            int delta = to - from;
+            List<Interval> shifted = new ArrayList<>(protectedIntervals.size());
+            for (Interval interval : protectedIntervals) {
+                if (interval.start() >= to) {
+                    shifted.add(new Interval(interval.start() - delta, interval.end() - delta));
+                } else {
+                    shifted.add(interval);
+                }
+            }
+            protectedIntervals = merge(shifted);
+        }
+
+        private List<Interval> removableIntervals() {
+            List<Interval> gaps = new ArrayList<>();
+            int cursor = 0;
+            for (Interval interval : protectedIntervals) {
+                if (cursor < interval.start()) gaps.add(new Interval(cursor, interval.start()));
+                cursor = Math.max(cursor, interval.end());
+            }
+            if (cursor < bits.bitLength()) gaps.add(new Interval(cursor, bits.bitLength()));
+            return gaps;
+        }
+
+        private int randomSafeBoundary(GenomeRandom random) {
+            int count = 0;
+            for (int p = 0; p <= bits.bitLength(); p++) if (safe(p)) count++;
+            if (count == 0) return bits.bitLength();
+            int pick = random.nextInt(count);
+            for (int p = 0; p <= bits.bitLength(); p++) {
+                if (!safe(p)) continue;
+                if (pick-- == 0) return p;
+            }
+            throw new IllegalStateException("failed to choose safe scaffold boundary");
+        }
+
+        void insertAtSafeBoundary(BitSequence block, GenomeRandom random) {
+            int position = randomSafeBoundary(random);
+            bits = bits.insert(position, block);
+            shiftAfterInsertion(position, block.bitLength(), true);
+        }
+
+        private void shiftAfterInsertion(int position, int delta, boolean protectInserted) {
+            List<Interval> shifted = new ArrayList<>(protectedIntervals.size() + (protectInserted ? 1 : 0));
+            for (Interval interval : protectedIntervals) {
+                if (position <= interval.start()) {
+                    shifted.add(new Interval(interval.start() + delta, interval.end() + delta));
+                } else {
+                    shifted.add(interval);
+                }
+            }
+            if (protectInserted) shifted.add(new Interval(position, position + delta));
             protectedIntervals = merge(shifted);
         }
 
