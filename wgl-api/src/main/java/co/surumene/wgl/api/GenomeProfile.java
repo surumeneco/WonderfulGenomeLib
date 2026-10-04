@@ -10,6 +10,14 @@ public interface GenomeProfile<P> {
 
     DirectContributionModel contributionModel(GenomeAddress address);
 
+    /**
+     * Build the profile-owned extension payload for a synthesized direct gene.
+     * Implementations must return between minimumExtensionBits(address) and 64 bits.
+     */
+    default BitSequence synthesisExtension(GenomeAddress address, SynthesisTarget target, GenomeRandom random) {
+        return BitSequence.empty();
+    }
+
     /** Convert generic decoded physical contributions into consumer phenotype data. */
     P mapPhenotype(DecodedGenome decodedGenome);
 }
