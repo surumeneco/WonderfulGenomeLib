@@ -44,10 +44,10 @@ class NahrBreedingTest {
                 List.of(child.haplotypeB().bitLength()),
                 backbone.baselineChromosomeLengths()));
         assertTrue(
-                child.haplotypeA().bitLength() != a.bitLength()
-                        || child.haplotypeA().bitLength() != b.bitLength()
-                        || child.haplotypeB().bitLength() != a.bitLength()
-                        || child.haplotypeB().bitLength() != b.bitLength(),
+                (child.haplotypeA().bitLength() != a.bitLength()
+                        && child.haplotypeA().bitLength() != b.bitLength())
+                        || (child.haplotypeB().bitLength() != a.bitLength()
+                        && child.haplotypeB().bitLength() != b.bitLength()),
                 "forced NAHR should produce a structurally recombined product");
     }
 }
