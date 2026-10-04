@@ -5,6 +5,23 @@ import co.surumene.wgl.api.GenomeRandom;
 final class Sampling {
     private Sampling() {}
 
+    static double standardGaussian(GenomeRandom random) {
+        if (random == null) throw new IllegalArgumentException("random must not be null");
+        double u1;
+        do {
+            u1 = random.nextDouble();
+            if (!Double.isFinite(u1) || u1 < 0.0 || u1 >= 1.0) {
+                throw new IllegalArgumentException("GenomeRandom.nextDouble() must return a finite value in [0,1)");
+            }
+        } while (u1 == 0.0);
+        double u2 = random.nextDouble();
+        if (!Double.isFinite(u2) || u2 < 0.0 || u2 >= 1.0) {
+            throw new IllegalArgumentException("GenomeRandom.nextDouble() must return a finite value in [0,1)");
+        }
+        return StrictMath.sqrt(-2.0 * StrictMath.log(u1))
+                * StrictMath.cos(2.0 * StrictMath.PI * u2);
+    }
+
     static int poisson(double lambda, GenomeRandom random) {
         if (lambda <= 0.0) return 0;
         // Current Engine revision uses Knuth sampling. The expected lambda in WGL is small.
