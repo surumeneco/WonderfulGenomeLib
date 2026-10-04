@@ -48,7 +48,7 @@ class SynthesizerBlockRegenerationTest {
                 new EngineConfig.Synthesizer(
                         defaults.synthesizer().convergenceTolerance(),
                         1,
-                        defaults.synthesizer().microCorrectionMaxRatio()),
+                        defaults.synthesizer().localAdjustmentMaxContributionRatio()),
                 defaults.eventRetryMax());
 
         GenomeRandom random = new GenomeRandom() {
@@ -128,7 +128,7 @@ class SynthesizerBlockRegenerationTest {
                 new EngineConfig.Synthesizer(
                         defaults.synthesizer().convergenceTolerance(),
                         1,
-                        defaults.synthesizer().microCorrectionMaxRatio()),
+                        defaults.synthesizer().localAdjustmentMaxContributionRatio()),
                 defaults.eventRetryMax());
 
         SynthesisResult.Success success = assertInstanceOf(SynthesisResult.Success.class,
