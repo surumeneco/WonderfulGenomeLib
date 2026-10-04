@@ -13,6 +13,7 @@ public record BackboneDefinition(String backboneId, int genomeFormatVersion,
         if (genomeFormatVersion < 1 || genomeFormatVersion > 0xFFFF) throw new IllegalArgumentException("invalid format version");
         Objects.requireNonNull(chromosomes, "chromosomes");
         if (chromosomes.isEmpty()) throw new IllegalArgumentException("at least one chromosome is required");
+        if (chromosomes.size() > 0xFFFF) throw new IllegalArgumentException("too many chromosomes");
         chromosomes = List.copyOf(chromosomes);
         Objects.requireNonNull(safetyPolicy, "safetyPolicy");
     }
