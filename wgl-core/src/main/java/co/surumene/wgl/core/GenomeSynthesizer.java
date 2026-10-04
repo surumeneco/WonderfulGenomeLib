@@ -72,9 +72,13 @@ final class GenomeSynthesizer {
                 sawSafetyRejection = true;
                 continue;
             }
-            sawSafeCandidate = true;
-
             DecodeResult<?> decoded = decoder.decode(profile, genome);
+            if (!synthesisSafe(profile, genome, decoded.decodedGenome())) {
+                sawSafetyRejection = true;
+                sawSafeCandidate = false;
+                continue;
+            }
+            sawSafeCandidate = true;
             if (target.isSatisfied(decoded.decodedGenome(), config.synthesizer().convergenceTolerance())) {
                 return successWithMicroCorrections(
                         profile, backbone, target, synthesisPlans, a, b, decoded, random);
@@ -164,6 +168,7 @@ final class GenomeSynthesizer {
             if (!safeDiploid(backbone, genome)) continue;
 
             DecodeResult<?> next = decoder.decode(profile, genome);
+            if (!synthesisSafe(profile, genome, next.decodedGenome())) continue;
             double nextError = totalError(synthesisPlans, next.decodedGenome());
             double currentError = totalError(synthesisPlans, decoded.decodedGenome());
             if (!(nextError < currentError)) continue;
@@ -203,25 +208,32 @@ final class GenomeSynthesizer {
         Double targetScore = target.continuousTargets().get(address);
         if (targetScore == null) return null;
 
-        for (MutableScaffold scaffold : a) scaffold.removeGeneratedBlocks(address);
-        for (MutableScaffold scaffold : b) scaffold.removeGeneratedBlocks(address);
+        List<MutableScaffold> trialA = copyScaffolds(a);
+        List<MutableScaffold> trialB = copyScaffolds(b);
+        for (MutableScaffold scaffold : trialA) scaffold.removeGeneratedBlocks(address);
+        for (MutableScaffold scaffold : trialB) scaffold.removeGeneratedBlocks(address);
 
         SynthesisAddressPlan replacement = Objects.requireNonNull(
                 profile.synthesisPlan(address, targetScore, context, random),
                 "profile synthesisPlan returned null");
-        if (!placeAddressPlan(profile, backbone, target, address, replacement, a, b, random)) {
+        if (!placeAddressPlan(profile, backbone, target, address, replacement, trialA, trialB, random)) {
             return null;
         }
-        synthesisPlans.put(address, replacement);
 
-        DiploidGenome regeneratedGenome = currentGenome(backbone, a, b);
+        Map<GenomeAddress, SynthesisAddressPlan> trialPlans = new TreeMap<>(synthesisPlans);
+        trialPlans.put(address, replacement);
+
+        DiploidGenome regeneratedGenome = currentGenome(backbone, trialA, trialB);
         if (!safeDiploid(backbone, regeneratedGenome)) return null;
         DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
+        if (!synthesisSafe(profile, regeneratedGenome, regeneratedDecoded.decodedGenome())) return null;
+
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
             return successWithMicroCorrections(
-                    profile, backbone, target, synthesisPlans, a, b, regeneratedDecoded, random);
+                    profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random);
         }
-        return locallyAdjust(profile, backbone, target, synthesisPlans, a, b, regeneratedDecoded, random);
+        return locallyAdjust(
+                profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random);
     }
 
     private SynthesisResult.Success regenerateProfileBlocks(
@@ -245,6 +257,7 @@ final class GenomeSynthesizer {
 
         double tolerance = config.synthesizer().convergenceTolerance();
         DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
+        if (!synthesisSafe(profile, regeneratedGenome, regeneratedDecoded.decodedGenome())) return null;
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
             return successWithMicroCorrections(
                     profile, backbone, target, synthesisPlans,
@@ -313,6 +326,7 @@ final class GenomeSynthesizer {
             if (!safeDiploid(backbone, trialGenome)) continue;
 
             DecodeResult<?> next = decoder.decode(profile, trialGenome);
+            if (!synthesisSafe(profile, trialGenome, next.decodedGenome())) continue;
             if (feedsRelay(next.decodedGenome(), chromosome, haplotype, geneStart)) continue;
             if (!target.isSatisfied(next.decodedGenome(), tolerance)) continue;
 
@@ -490,6 +504,48 @@ final class GenomeSynthesizer {
             scaffold.insertAtSafeBoundary(block.bits(), random);
         }
         return blocks.size();
+    }
+
+    private static boolean synthesisSafe(GenomeProfile<?> profile,
+                                         DiploidGenome genome,
+                                         DecodedGenome decodedGenome) {
+        SynthesisSafetyPolicy policy = Objects.requireNonNull(
+                profile.synthesisSafetyPolicy(),
+                "profile synthesisSafetyPolicy returned null");
+        return policy.isSafe(synthesisMetrics(genome, decodedGenome), decodedGenome);
+    }
+
+    private static SynthesisMetrics synthesisMetrics(DiploidGenome genome, DecodedGenome decodedGenome) {
+        List<SynthesisHaplotypeMetrics> metrics = new ArrayList<>();
+        for (int chromosome = 0; chromosome < genome.chromosomePairs().size(); chromosome++) {
+            ChromosomePair pair = genome.chromosomePairs().get(chromosome);
+            for (int haplotype = 0; haplotype <= 1; haplotype++) {
+                BitSequence bits = haplotype == 0 ? pair.haplotypeA() : pair.haplotypeB();
+                List<DecodedGene> genes = decodedGenome.physicalGenes().stream()
+                        .filter(gene -> gene.chromosomeIndex() == chromosome
+                                && gene.haplotypeIndex() == haplotype)
+                        .toList();
+
+                List<Interval> ranges = new ArrayList<>(genes.size());
+                for (DecodedGene gene : genes) {
+                    int start = Math.max(0, Math.min(bits.bitLength(), gene.startBit()));
+                    int end = Math.max(start, Math.min(bits.bitLength(), gene.endBitExclusive()));
+                    if (end > start) ranges.add(new Interval(start, end));
+                }
+                int recognizableBits = 0;
+                for (Interval interval : MutableScaffold.merge(ranges)) {
+                    recognizableBits += interval.end() - interval.start();
+                }
+
+                metrics.add(new SynthesisHaplotypeMetrics(
+                        chromosome,
+                        haplotype,
+                        bits.bitLength(),
+                        genes.size(),
+                        recognizableBits));
+            }
+        }
+        return new SynthesisMetrics(metrics);
     }
 
     private static List<MutableScaffold> copyScaffolds(List<MutableScaffold> source) {
