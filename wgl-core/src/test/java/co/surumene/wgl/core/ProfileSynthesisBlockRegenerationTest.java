@@ -67,7 +67,7 @@ class ProfileSynthesisBlockRegenerationTest {
                 new EngineConfig.Synthesizer(
                         defaults.synthesizer().convergenceTolerance(),
                         1,
-                        defaults.synthesizer().microCorrectionMaxRatio()),
+                        defaults.synthesizer().localAdjustmentMaxContributionRatio()),
                 defaults.eventRetryMax());
 
         SynthesisResult result = WonderfulGenomeEngine.create(config).synthesize(
