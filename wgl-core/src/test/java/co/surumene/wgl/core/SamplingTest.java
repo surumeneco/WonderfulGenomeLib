@@ -7,6 +7,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SamplingTest {
     @Test
+    void standardGaussianHasStableEngineRevisionGoldenValue() {
+        double value = Sampling.standardGaussian(new SplitMix64GenomeRandom(20261004L));
+        assertEquals(-0.4538944078092156, value, 1e-15);
+    }
+
+    @Test
     void truncatedGeometricRedrawsValuesAboveMaxInsteadOfClamping() {
         SequenceRandom random = new SequenceRandom(0.99, 0.0);
         assertEquals(1, Sampling.truncatedGeometric(0.5, 2, random));
