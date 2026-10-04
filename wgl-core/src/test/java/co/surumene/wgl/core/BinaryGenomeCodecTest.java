@@ -33,4 +33,12 @@ class BinaryGenomeCodecTest {
         malformed[13] |= 0x01;
         assertThrows(GenomeCodecException.class, () -> codec.decode(malformed));
     }
+    @Test
+    void v1CodecRejectsEncodingUnsupportedGenomeFormat() {
+        BinaryGenomeCodecV1 codec = new BinaryGenomeCodecV1();
+        DiploidGenome v2 = new DiploidGenome(2, List.of(
+                new ChromosomePair(BitSequence.fromBits("1"), BitSequence.fromBits("0"))));
+        assertThrows(IllegalArgumentException.class, () -> codec.encode(v2));
+    }
+
 }
