@@ -54,9 +54,30 @@ final class GenomeDecoderEngine {
         Map<GenomeAddress,AddressAggregate> aggregates=new TreeMap<>();
         for(var entry:byAddress.entrySet()) aggregates.put(entry.getKey(),aggregate(entry.getValue()));
         List<DecodedGene> physical=genes.stream().sorted(LocatedGene.ORDER).map(x->x.gene).toList();
-        DecodedGenome decoded=new DecodedGenome(aggregates,physical);
+        List<DecodedHomologyBlock> homologyBlocks = profile.requiresHomologyContext()
+                ? homologyBlocks(genome)
+                : List.of();
+        DecodedGenome decoded=new DecodedGenome(aggregates,physical,homologyBlocks);
         P phenotype=profile.mapPhenotype(decoded);
         return new DecodeResult<>(decoded,phenotype,new DecoderIdentity(WonderfulGenomeEngine.ENGINE_REVISION,config.decoderFingerprint(),profile.descriptor()));
+    }
+
+    private List<DecodedHomologyBlock> homologyBlocks(DiploidGenome genome) {
+        HomologyEngine homology = new HomologyEngine(config);
+        List<DecodedHomologyBlock> out = new ArrayList<>();
+        for (int chromosome = 0; chromosome < genome.chromosomePairs().size(); chromosome++) {
+            ChromosomePair pair = genome.chromosomePairs().get(chromosome);
+            HomologyMap map = homology.analyze(pair.haplotypeA(), pair.haplotypeB());
+            for (HomologyBlock block : map.blocks()) {
+                out.add(new DecodedHomologyBlock(
+                        chromosome,
+                        block.startA(),
+                        block.endA(),
+                        block.startB(),
+                        block.endB()));
+            }
+        }
+        return List.copyOf(out);
     }
 
     private List<LocatedGene> parseGenome(GenomeProfile<?> profile,DiploidGenome genome){
