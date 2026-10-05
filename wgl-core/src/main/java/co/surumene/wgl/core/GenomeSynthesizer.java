@@ -642,26 +642,78 @@ final class GenomeSynthesizer {
     private static GenePlan bestPlan(DirectContributionModel model, GenomeAddress address, double target,
                                      int minCount, int maxCount, boolean negative) {
         if (target <= 0.0) return GenePlan.empty();
+
+        double[] saturationByMagnitude = new double[128];
+        NavigableMap<Double, Integer> minimumMagnitudeBySaturation = new TreeMap<>();
+        for (int magnitude = 0; magnitude <= 127; magnitude++) {
+            double saturation = u(model, address, negative, magnitude);
+            saturationByMagnitude[magnitude] = saturation;
+            minimumMagnitudeBySaturation.merge(saturation, magnitude, Math::min);
+        }
+
         GenePlan best = null;
         for (int count = minCount; count <= maxCount; count++) {
             for (int commonMagnitude = 0; commonMagnitude <= 127; commonMagnitude++) {
-                double commonU = u(model, address, negative, commonMagnitude);
+                double commonU = saturationByMagnitude[commonMagnitude];
                 double commonSurvival = StrictMath.pow(1.0 - commonU, Math.max(0, count - 1));
-                for (int tailMagnitude = 0; tailMagnitude <= 127; tailMagnitude++) {
-                    double tailU = u(model, address, negative, tailMagnitude);
-                    double achieved = 1.0 - commonSurvival * (1.0 - tailU);
-                    double error = StrictMath.abs(achieved - target);
-                    if (best == null || error < best.error()) {
-                        List<Integer> magnitudes = new ArrayList<>(count);
-                        for (int i = 0; i < count - 1; i++) magnitudes.add(commonMagnitude);
-                        magnitudes.add(tailMagnitude);
-                        best = new GenePlan(List.copyOf(magnitudes), achieved, error);
-                        if (error <= 1.0e-12) return best;
-                    }
+                int tailMagnitude = bestTailMagnitude(
+                        minimumMagnitudeBySaturation,
+                        commonSurvival,
+                        target);
+                double tailU = saturationByMagnitude[tailMagnitude];
+                double achieved = 1.0 - commonSurvival * (1.0 - tailU);
+                double error = StrictMath.abs(achieved - target);
+                if (best == null || error < best.error()) {
+                    List<Integer> magnitudes = new ArrayList<>(count);
+                    for (int i = 0; i < count - 1; i++) magnitudes.add(commonMagnitude);
+                    magnitudes.add(tailMagnitude);
+                    best = new GenePlan(List.copyOf(magnitudes), achieved, error);
+                    if (error <= 1.0e-12) return best;
                 }
             }
         }
         return best;
+    }
+
+    private static int bestTailMagnitude(
+            NavigableMap<Double, Integer> minimumMagnitudeBySaturation,
+            double commonSurvival,
+            double target) {
+        if (!(commonSurvival > 0.0)) {
+            return 0;
+        }
+
+        double desiredTailSaturation = 1.0 - (1.0 - target) / commonSurvival;
+        double epsilonInSaturation = 1.0e-12 / commonSurvival;
+        double from = desiredTailSaturation - epsilonInSaturation;
+        double to = desiredTailSaturation + epsilonInSaturation;
+
+        int thresholdMagnitude = Integer.MAX_VALUE;
+        for (int magnitude : minimumMagnitudeBySaturation
+                .subMap(from, true, to, true)
+                .values()) {
+            thresholdMagnitude = Math.min(thresholdMagnitude, magnitude);
+        }
+        if (thresholdMagnitude != Integer.MAX_VALUE) {
+            return thresholdMagnitude;
+        }
+
+        Map.Entry<Double, Integer> floor =
+                minimumMagnitudeBySaturation.floorEntry(desiredTailSaturation);
+        Map.Entry<Double, Integer> ceiling =
+                minimumMagnitudeBySaturation.ceilingEntry(desiredTailSaturation);
+        if (floor == null) return Objects.requireNonNull(ceiling).getValue();
+        if (ceiling == null) return floor.getValue();
+
+        double floorAchieved =
+                1.0 - commonSurvival * (1.0 - floor.getKey());
+        double ceilingAchieved =
+                1.0 - commonSurvival * (1.0 - ceiling.getKey());
+        double floorError = StrictMath.abs(floorAchieved - target);
+        double ceilingError = StrictMath.abs(ceilingAchieved - target);
+        if (floorError < ceilingError) return floor.getValue();
+        if (ceilingError < floorError) return ceiling.getValue();
+        return Math.min(floor.getValue(), ceiling.getValue());
     }
 
     private static double u(DirectContributionModel model, GenomeAddress address,
