@@ -11,6 +11,20 @@ public interface GenomeProfile<P> {
     DirectContributionModel contributionModel(GenomeAddress address);
 
     /**
+     * Optionally vary the same-length physical Founder template before WGL performs
+     * scaffold length adjustment and generated-material placement. The default keeps
+     * the canonical Backbone template unchanged. Consumers may use this for
+     * profile-owned Founder anchor/marker variation, but must not change bit length.
+     */
+    default BitSequence founderTemplateBits(
+            int chromosomeIndex,
+            int haplotypeIndex,
+            ChromosomeTemplate template,
+            GenomeRandom random) {
+        return template.templateBits();
+    }
+
+    /**
      * Whether decode should attach physical homologous-block coordinates to DecodedGenome.
      * Profiles that do not need homology context keep this disabled to avoid the analysis cost.
      */
