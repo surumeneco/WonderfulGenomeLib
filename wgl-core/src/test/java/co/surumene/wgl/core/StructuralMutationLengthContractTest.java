@@ -8,6 +8,7 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class StructuralMutationLengthContractTest {
@@ -41,9 +42,46 @@ class StructuralMutationLengthContractTest {
         assertEquals(6, selectedEnd - selectedStart);
     }
 
+    @Test
+    void copyInsertionDoesNotSilentlyBecomeRandomInsertionWhenSampledSourceLengthIsUnavailable() throws Exception {
+        EngineConfig config = EngineConfig.defaults();
+        BreedingEngine engine = new BreedingEngine(config, new GenomeDecoderEngine(config));
+        StructuralMutationStage stage = new StructuralMutationStage(List.of(
+                TrackedSequence.fresh(BitSequence.fromBits("0000"))));
+
+        Method insertion = BreedingEngine.class.getDeclaredMethod(
+                "insertion", StructuralMutationStage.class, EngineConfig.Structural.class, GenomeRandom.class);
+        insertion.setAccessible(true);
+
+        boolean planned = (boolean) insertion.invoke(
+                engine,
+                stage,
+                config.mutation().structural(),
+                new SequencedDoubleRandom(0.0, 0.15, 0.90));
+
+        assertFalse(planned);
+    }
+
     private static final class ZeroRandom implements GenomeRandom {
         @Override public long nextLong() { return 0L; }
         @Override public double nextDouble() { return 0.0; }
+        @Override public int nextInt(int bound) { return 0; }
+        @Override public boolean nextBoolean() { return false; }
+    }
+
+    private static final class SequencedDoubleRandom implements GenomeRandom {
+        private final double[] values;
+        private int index;
+
+        private SequencedDoubleRandom(double... values) {
+            this.values = values.clone();
+        }
+
+        @Override public long nextLong() { return 0L; }
+        @Override public double nextDouble() {
+            if (index >= values.length) throw new AssertionError("unexpected nextDouble call");
+            return values[index++];
+        }
         @Override public int nextInt(int bound) { return 0; }
         @Override public boolean nextBoolean() { return false; }
     }
