@@ -42,7 +42,9 @@ final class ProfileBlockResidualSynthesisTest {
                     GenomeRandom random) {
                 BitSequence positive = GeneCodecV1.encode(
                         address, false, 40, 15, BitSequence.empty());
-                return List.of(SynthesisBlock.fixed(positive, 0, 0));
+                BitSequence guard = BitSequence.fromBits("0".repeat(32));
+                return List.of(SynthesisBlock.fixed(
+                        guard.concat(positive).concat(guard), 0, 0));
             }
 
             @Override public Double mapPhenotype(DecodedGenome decodedGenome) {
@@ -65,5 +67,11 @@ final class ProfileBlockResidualSynthesisTest {
                 targetScore,
                 success.decoded().decodedGenome().aggregate(address).score(),
                 EngineConfig.defaults().synthesizer().convergenceTolerance());
+        org.junit.jupiter.api.Assertions.assertTrue(
+                success.decoded().decodedGenome().physicalGenes().stream()
+                        .anyMatch(gene -> address.equals(gene.address())
+                                && gene.magnitudeCode() == 40
+                                && gene.expressionCode() == 15),
+                "profile-supplied positive gene must survive canonical decoding");
     }
 }
