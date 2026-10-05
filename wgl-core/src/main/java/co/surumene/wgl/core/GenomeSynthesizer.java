@@ -232,12 +232,12 @@ final class GenomeSynthesizer {
                 "profile synthesisPlan returned null");
         DecodeResult<?> baseline = decoder.decode(
                 profile, currentGenome(backbone, trialA, trialB));
-        SynthesisAddressPlan residual = residualPlan(
+        SynthesisAddressPlan remainingPlan = residualPlan(
                 replacement,
                 baseline.decodedGenome().aggregate(address),
                 config.synthesizer().convergenceTolerance());
-        if (residual == null
-                || !placeAddressPlan(profile, backbone, target, address, residual, trialA, trialB, random)) {
+        if (remainingPlan == null
+                || !placeAddressPlan(profile, backbone, target, address, remainingPlan, trialA, trialB, random)) {
             return null;
         }
 
