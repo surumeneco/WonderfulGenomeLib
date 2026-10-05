@@ -6,7 +6,7 @@ import java.util.Objects;
 public final class WonderfulGenomeEngine implements GenomeEngine {
     public static final int ENGINE_REVISION=1;
     public static final int GENOME_FORMAT_VERSION=1;
-    private final EngineConfig config;private final BinaryGenomeCodecV1 codec=new BinaryGenomeCodecV1();private final GenomeDecoderEngine decoder;private final GenomeSynthesizer synthesizer;private final BreedingEngine breeding;private final MarkerEngine marker=new MarkerEngine();private final GenomeSequenceCodec sequenceCodec=new GenomeSequenceCodecV1();
+    private final EngineConfig config;private final BinaryGenomeCodecV1 codec=new BinaryGenomeCodecV1();private final GenomeDecoderEngine decoder;private final GenomeSynthesizer synthesizer;private final BreedingEngine breeding;private final MarkerEngine marker=new MarkerEngine();private final GenomeSequenceCodec sequenceCodec=new GenomeSequenceCodecV1();private final GeneSequenceCodec geneSequenceCodec=new GeneSequenceCodecV1();
     private WonderfulGenomeEngine(EngineConfig config){this.config=Objects.requireNonNull(config);decoder=new GenomeDecoderEngine(config);synthesizer=new GenomeSynthesizer(config,decoder);breeding=new BreedingEngine(config,decoder);}
     public static WonderfulGenomeEngine create(EngineConfig config){return new WonderfulGenomeEngine(config);}
     public EngineConfig config(){return config;}
@@ -20,6 +20,7 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
     @Override public MarkerResult marker(BackboneDefinition backbone,DiploidGenome genome){requireBackboneV1(backbone);requireGenomeV1(genome);return marker.marker(backbone,genome);}
     @Override public MarkerResult marker(BackboneDefinition backbone,DiploidGenome genome,MarkerScheme scheme){requireBackboneV1(backbone);requireGenomeV1(genome);return Objects.requireNonNull(scheme).marker(backbone,genome);}
     @Override public GenomeSequenceCodec sequenceCodec(){return sequenceCodec;}
+    @Override public GeneSequenceCodec geneSequenceCodec(){return geneSequenceCodec;}
 
     private static void requireGenomeV1(DiploidGenome genome){
         Objects.requireNonNull(genome,"genome");

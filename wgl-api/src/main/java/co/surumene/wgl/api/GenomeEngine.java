@@ -24,4 +24,5 @@ public interface GenomeEngine {
     MarkerResult marker(BackboneDefinition backbone, DiploidGenome genome);
     MarkerResult marker(BackboneDefinition backbone, DiploidGenome genome, MarkerScheme scheme);
     GenomeSequenceCodec sequenceCodec();
+    GeneSequenceCodec geneSequenceCodec();
 }
