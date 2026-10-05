@@ -681,8 +681,8 @@ final class BreedingEngine {
         List<Double> weights = new ArrayList<>();
         for (int c = 0; c < snapshot.size(); c++) {
             TrackedSequence sequence = snapshot.get(c);
-            if (sequence.bitLength() == 0) continue;
-            int length = Math.min(desiredLength, sequence.bitLength());
+            if (sequence.bitLength() < desiredLength) continue;
+            int length = desiredLength;
             for (int start = 0; start + length <= sequence.bitLength(); start++) {
                 double w = StrictMath.sqrt(sequence.structuralBoundaryWeight(start)
                         * sequence.structuralBoundaryWeight(start + length));
