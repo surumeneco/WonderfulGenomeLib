@@ -36,9 +36,16 @@ final class GenomeSynthesizer {
         for (int attempt = 0; attempt < context.genomeRetries(); attempt++) {
             List<MutableScaffold> a = new ArrayList<>();
             List<MutableScaffold> b = new ArrayList<>();
-            for (ChromosomeTemplate template : backbone.chromosomes()) {
-                a.add(new MutableScaffold(template, sampleFounderLength(template, random), random));
-                b.add(new MutableScaffold(template, sampleFounderLength(template, random), random));
+            for (int chromosome = 0; chromosome < backbone.chromosomes().size(); chromosome++) {
+                ChromosomeTemplate template = backbone.chromosomes().get(chromosome);
+                BitSequence initialA = founderTemplateBits(
+                        profile, chromosome, 0, template, random);
+                BitSequence initialB = founderTemplateBits(
+                        profile, chromosome, 1, template, random);
+                a.add(new MutableScaffold(
+                        template, initialA, sampleFounderLength(template, random), random));
+                b.add(new MutableScaffold(
+                        template, initialB, sampleFounderLength(template, random), random));
             }
 
             int profileBlockCount = placeProfileBlocks(
@@ -663,6 +670,24 @@ final class GenomeSynthesizer {
         return model.saturation(address, StrictMath.abs(d));
     }
 
+    private static BitSequence founderTemplateBits(
+            GenomeProfile<?> profile,
+            int chromosomeIndex,
+            int haplotypeIndex,
+            ChromosomeTemplate template,
+            GenomeRandom random) {
+        BitSequence bits = Objects.requireNonNull(
+                profile.founderTemplateBits(
+                        chromosomeIndex, haplotypeIndex, template, random),
+                "profile founderTemplateBits returned null");
+        if (bits.bitLength() != template.templateBits().bitLength()) {
+            throw new IllegalStateException(
+                    "profile founderTemplateBits must preserve template bit length: chromosome="
+                            + chromosomeIndex + ", haplotype=" + haplotypeIndex);
+        }
+        return bits;
+    }
+
     private static int sampleFounderLength(ChromosomeTemplate template, GenomeRandom random) {
         FounderScaffoldTolerance tolerance = template.founderScaffoldTolerance();
         int baseline = template.templateBits().bitLength();
@@ -787,7 +812,14 @@ final class GenomeSynthesizer {
         private List<GeneratedInterval> generatedIntervals;
 
         MutableScaffold(ChromosomeTemplate template) {
-            this.bits = template.templateBits();
+            this(template, template.templateBits());
+        }
+
+        private MutableScaffold(ChromosomeTemplate template, BitSequence initialBits) {
+            this.bits = Objects.requireNonNull(initialBits, "initialBits");
+            if (initialBits.bitLength() != template.templateBits().bitLength()) {
+                throw new IllegalArgumentException("initial founder template length must match Backbone template");
+            }
             List<Interval> intervals = new ArrayList<>();
             for (AnchorSeed seed : template.anchors()) {
                 intervals.add(new Interval(seed.position(), seed.position() + 48));
@@ -802,9 +834,17 @@ final class GenomeSynthesizer {
             this.generatedIntervals = new ArrayList<>();
         }
 
-        MutableScaffold(ChromosomeTemplate template, int targetLength, GenomeRandom random) {
-            this(template);
+        MutableScaffold(
+                ChromosomeTemplate template,
+                BitSequence initialBits,
+                int targetLength,
+                GenomeRandom random) {
+            this(template, initialBits);
             resizeTo(targetLength, random);
+        }
+
+        MutableScaffold(ChromosomeTemplate template, int targetLength, GenomeRandom random) {
+            this(template, template.templateBits(), targetLength, random);
         }
 
         private MutableScaffold(BitSequence bits,
