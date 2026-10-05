@@ -45,6 +45,7 @@ final class GenomeSynthesizer {
                     profile, backbone, target, context, a, b, random);
 
             boolean unsatisfiable = false;
+            boolean profileOvershoot = false;
             Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans = new TreeMap<>();
             for (var e : new TreeMap<>(target.continuousTargets()).entrySet()) {
                 GenomeAddress address = e.getKey();
@@ -54,10 +55,23 @@ final class GenomeSynthesizer {
                         "profile synthesisPlan returned null");
                 synthesisPlans.put(address, synthesisPlan);
 
-                if (!placeAddressPlan(profile, backbone, target, address, synthesisPlan, a, b, random)) {
+                DecodeResult<?> current = decoder.decode(
+                        profile, currentGenome(backbone, a, b));
+                SynthesisAddressPlan residual = residualPlan(
+                        synthesisPlan,
+                        current.decodedGenome().aggregate(address),
+                        config.synthesizer().convergenceTolerance());
+                if (residual == null) {
+                    profileOvershoot = true;
+                    break;
+                }
+                if (!placeAddressPlan(profile, backbone, target, address, residual, a, b, random)) {
                     unsatisfiable = true;
                     break;
                 }
+            }
+            if (profileOvershoot) {
+                continue;
             }
             if (unsatisfiable) {
                 return new SynthesisResult.Failure(SynthesisFailureReason.UNSATISFIABLE_TARGET,
@@ -216,7 +230,14 @@ final class GenomeSynthesizer {
         SynthesisAddressPlan replacement = Objects.requireNonNull(
                 profile.synthesisPlan(address, targetScore, context, random),
                 "profile synthesisPlan returned null");
-        if (!placeAddressPlan(profile, backbone, target, address, replacement, trialA, trialB, random)) {
+        DecodeResult<?> baseline = decoder.decode(
+                profile, currentGenome(backbone, trialA, trialB));
+        SynthesisAddressPlan remainingPlan = residualPlan(
+                replacement,
+                baseline.decodedGenome().aggregate(address),
+                config.synthesizer().convergenceTolerance());
+        if (remainingPlan == null
+                || !placeAddressPlan(profile, backbone, target, address, remainingPlan, trialA, trialB, random)) {
             return null;
         }
 
@@ -570,6 +591,46 @@ final class GenomeSynthesizer {
             pairs.add(new ChromosomePair(a.get(i).bits(), b.get(i).bits()));
         }
         return new DiploidGenome(backbone.genomeFormatVersion(), pairs);
+    }
+
+    private static SynthesisAddressPlan residualPlan(
+            SynthesisAddressPlan desired,
+            AddressAggregate current,
+            double tolerance) {
+        double currentPositive = current.positiveSaturation();
+        double currentNegative = 1.0 - current.negativeSurvival();
+
+        if (currentPositive > desired.positiveSaturation() + tolerance
+                || currentNegative > desired.negativeSaturation() + tolerance) {
+            return null;
+        }
+
+        double positive = remainingSaturation(
+                desired.positiveSaturation(), currentPositive, tolerance);
+        double negative = remainingSaturation(
+                desired.negativeSaturation(), currentNegative, tolerance);
+
+        return new SynthesisAddressPlan(
+                positive,
+                negative,
+                positive == 0.0 ? 0 : desired.minPositiveGenes(),
+                positive == 0.0 ? 0 : desired.maxPositiveGenes(),
+                negative == 0.0 ? 0 : desired.minNegativeGenes(),
+                negative == 0.0 ? 0 : desired.maxNegativeGenes());
+    }
+
+    private static double remainingSaturation(
+            double target,
+            double current,
+            double tolerance) {
+        if (target <= current + tolerance) {
+            return 0.0;
+        }
+        if (current >= 1.0) {
+            return 1.0;
+        }
+        double residual = (target - current) / (1.0 - current);
+        return Math.max(0.0, Math.min(1.0, residual));
     }
 
     private static Residual largestResidual(Map<GenomeAddress, SynthesisAddressPlan> plans,
