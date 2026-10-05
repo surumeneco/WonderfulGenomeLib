@@ -159,7 +159,7 @@ final class GenomeDecoderEngine {
 
     private GenomeAddress extensionAddress(BitSequence ext,int offset,GenomeProfile<?> profile){
         if(offset+22>ext.bitLength())return null;Secded22.Decoded d=Secded22.decode(new BitHeader22((int)ext.toLong(offset,22)));
-        if(!d.valid())return null;GenomeAddress a=d.address();if(a.isRegulation()||a.target()==0xFF||!profile.isDefinedAddress(a))return null;return a;
+        if(!d.valid())return null;GenomeAddress a=d.address();if(a.isRegulation()||a.target()==0xFF||a.type()>=0xF0||!profile.isDefinedAddress(a))return null;return a;
     }
     private double applyFinalClamp(double adjusted,double local){
         if(local==0)return adjusted;double ratio=adjusted/local;ratio=clamp(ratio,config.regulation().finalMultiplierMin(),config.regulation().finalMultiplierMax());return local*ratio;
