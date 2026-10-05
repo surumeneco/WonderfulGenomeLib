@@ -63,7 +63,7 @@ public final class PhysicalGenomeDecoder {
     }
 
     private static boolean isKnownAddress(GenomeAddress a,GenomeProfile<?> profile){
-        if(a==null||a.target()==0xFF||a.type()==0xFF)return false;
+        if(a==null||a.target()==0xFF||a.type()>=0xF0)return false;
         if(a.type()==0x08)return a.target()<=0x0D;
         return profile.isDefinedAddress(a);
     }
