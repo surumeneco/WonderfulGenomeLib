@@ -11,10 +11,18 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class ReservedSynthesisTargetTest {
     @Test
     void synthesisRejectsFormatReservedTargetBeforeGeneratingGenome() {
-        GenomeAddress reserved = new GenomeAddress(0xF0, 0x00);
+        assertInvalidTarget(new GenomeAddress(0xF0, 0x00), "reserved-type-synthesis");
+    }
+
+    @Test
+    void synthesisRejectsReservedTargetByteBeforeGeneratingGenome() {
+        assertInvalidTarget(new GenomeAddress(0x00, 0xFF), "reserved-target-synthesis");
+    }
+
+    private static void assertInvalidTarget(GenomeAddress reserved, String profileId) {
         GenomeProfile<DecodedGenome> profile = new GenomeProfile<>() {
             @Override public ProfileDescriptor descriptor() {
-                return new ProfileDescriptor("reserved-synthesis-test", 1, new byte[32]);
+                return new ProfileDescriptor(profileId, 1, new byte[32]);
             }
             @Override public boolean isDefinedAddress(GenomeAddress address) {
                 return reserved.equals(address);
