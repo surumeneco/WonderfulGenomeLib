@@ -607,9 +607,8 @@ final class BreedingEngine {
             inserted = TrackedSequence.fresh(randomBits(length, random));
         } else {
             SourceInterval source = chooseSourceInterval(snapshot, length, random);
-            inserted = source == null
-                    ? TrackedSequence.fresh(randomBits(length, random))
-                    : snapshot.get(source.chromosome()).slice(source.start(), source.end());
+            if (source == null) return false;
+            inserted = snapshot.get(source.chromosome()).slice(source.start(), source.end());
         }
         return stage.insert(target.chromosome(), target.position(), inserted);
     }
