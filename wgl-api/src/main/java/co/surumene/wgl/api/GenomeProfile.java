@@ -11,6 +11,12 @@ public interface GenomeProfile<P> {
     DirectContributionModel contributionModel(GenomeAddress address);
 
     /**
+     * Whether decode should attach physical homologous-block coordinates to DecodedGenome.
+     * Profiles that do not need homology context keep this disabled to avoid the analysis cost.
+     */
+    default boolean requiresHomologyContext() { return false; }
+
+    /**
      * Map one consumer continuous target into generic positive/negative bounded contribution targets.
      * The default preserves WGL's standard P * N synthesis behavior.
      */
