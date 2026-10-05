@@ -22,7 +22,7 @@ final class GenomeSynthesizer {
         Objects.requireNonNull(random, "random");
 
         for (var e : target.continuousTargets().entrySet()) {
-            if (e.getKey().isRegulation() || e.getKey().type() >= 0xF0
+            if (e.getKey().isRegulation() || e.getKey().type() >= 0xF0 || e.getKey().target() == 0xFF
                     || !profile.isDefinedAddress(e.getKey())
                     || !Double.isFinite(e.getValue()) || e.getValue() < 0 || e.getValue() > 1) {
                 return new SynthesisResult.Failure(SynthesisFailureReason.INVALID_TARGET,
