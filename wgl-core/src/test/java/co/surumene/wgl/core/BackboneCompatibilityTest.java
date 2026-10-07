@@ -43,7 +43,7 @@ final class BackboneCompatibilityTest {
     void lengthSafetyRangeDoesNotDefineBackboneCompatibility() {
         BackboneDefinition backbone = TestBackbones.singlePair(2048);
         BitSequence template = backbone.chromosomes().getFirst().templateBits();
-        BitSequence oversized = template.concat(template);
+        BitSequence oversized = template.concat(template).concat(template);
 
         assertFalse(backbone.safetyPolicy().isSafe(
                 List.of(oversized.bitLength()),
