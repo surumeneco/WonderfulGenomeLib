@@ -35,6 +35,66 @@ final class BreedingParentSourceCodecTest {
     }
 
     @Test
+    void roundTripsZeroBitGameteChromosome() {
+        BreedingParentSource source =
+                new BreedingParentSource.Gamete(
+                        new HaploidGenome(1, List.of(BitSequence.empty())));
+
+        assertEquals(
+                source,
+                engine.decodeParentSource(engine.encodeParentSource(source)));
+    }
+
+    @Test
+    void rejectsBadMagicUnsupportedContainerVersionAndTruncatedPayload() {
+        BreedingParentSource source =
+                new BreedingParentSource.Gamete(
+                        new HaploidGenome(
+                                1, List.of(BitSequence.fromBits("101"))));
+        byte[] encoded = engine.encodeParentSource(source);
+
+        byte[] badMagic = encoded.clone();
+        badMagic[0] ^= 0x01;
+        assertThrows(
+                GenomeCodecException.class,
+                () -> engine.decodeParentSource(badMagic));
+
+        byte[] unsupportedContainer = encoded.clone();
+        unsupportedContainer[4] = 2;
+        assertThrows(
+                GenomeCodecException.class,
+                () -> engine.decodeParentSource(unsupportedContainer));
+
+        byte[] truncated =
+                java.util.Arrays.copyOf(encoded, encoded.length - 1);
+        assertThrows(
+                GenomeCodecException.class,
+                () -> engine.decodeParentSource(truncated));
+    }
+
+    @Test
+    void rejectsUnsupportedGameteGenomeFormatAndNonCanonicalTailBits() {
+        BreedingParentSource source =
+                new BreedingParentSource.Gamete(
+                        new HaploidGenome(
+                                1, List.of(BitSequence.fromBits("101"))));
+        byte[] encoded = engine.encodeParentSource(source);
+
+        byte[] unsupportedFormat = encoded.clone();
+        unsupportedFormat[10] = 0;
+        unsupportedFormat[11] = 2;
+        assertThrows(
+                GenomeCodecException.class,
+                () -> engine.decodeParentSource(unsupportedFormat));
+
+        byte[] nonCanonicalTail = encoded.clone();
+        nonCanonicalTail[18] |= 0x01;
+        assertThrows(
+                GenomeCodecException.class,
+                () -> engine.decodeParentSource(nonCanonicalTail));
+    }
+
+    @Test
     void rejectsTrailingBytesAndUnknownSourceType() {
         HaploidGenome haploid = new HaploidGenome(
                 1, List.of(BitSequence.fromBits("101")));

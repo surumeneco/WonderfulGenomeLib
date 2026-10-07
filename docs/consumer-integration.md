@@ -334,7 +334,7 @@ BreedingResult result = wgl.engine().breed(
 
 従来の `DiploidGenome × DiploidGenome` overloadも互換用に利用できます。内部では両親を `DiploidParent` として扱います。
 
-cross-parent HomologyはWGLが入力形態に応じて評価します。標準policyでは各染色体indexごとに、Diploid × Diploidは2×2、Diploid × Gameteは2×1、Gamete × Gameteは1×1のhaplotype組合せを評価し、通常Homology Blockが1つも成立しないindexがあれば `INSUFFICIENT_CROSS_PARENT_HOMOLOGY` を返します。
+cross-parent HomologyはWGLが入力形態に応じて評価します。標準policyでは各染色体indexごとに、Diploid × Diploidは2×2、Diploid × Gameteは2×1、Gamete × Gameteは1×1のhaplotype組合せを評価し、通常Homology Blockが1つも成立しないindexがあれば `INSUFFICIENT_CROSS_PARENT_HOMOLOGY` を返します。consumerが明示したcustom `CompatibilityPolicy` が拒否した場合は `COMPATIBILITY_POLICY_REJECTED` とし、policyの `CompatibilityReport.reason()` は `NoViableOffspring.detail()` に保持します。
 
 結果:
 
@@ -355,7 +355,8 @@ if (result instanceof BreedingResult.Success success) {
 | 値 | 意味 |
 | --- | --- |
 | `CHROMOSOME_COUNT_MISMATCH` | 染色体対数が一致しない |
-| `INSUFFICIENT_CROSS_PARENT_HOMOLOGY` | 親間Homologyが不足 |
+| `INSUFFICIENT_CROSS_PARENT_HOMOLOGY` | 標準Homology policyで親間Homologyが不足 |
+| `COMPATIBILITY_POLICY_REJECTED` | consumerが明示したcustom compatibility policyが拒否 |
 | `CONSTRAINT_UNSATISFIABLE` | 継承制約を満たせない |
 | `INVALID_PARENT_STRUCTURE` | 親Genome構造が繁殖入力として不正 |
 | `SAFETY_REJECTED` | Genome safety policyで拒否 |
