@@ -95,6 +95,42 @@ final class GameteBreedingTest {
     }
 
     @Test
+    void customCompatibilityPolicyRejectionUsesGenericPolicyFailureReason() {
+        WonderfulGenomeEngine engine =
+                WonderfulGenomeEngine.create(EngineConfig.defaults());
+        BackboneDefinition backbone = TestBackbones.singlePair(2048);
+        BitSequence template = backbone.chromosomes().getFirst().templateBits();
+        TestProfile profile =
+                TestProfile.defining(new GenomeAddress(0x00, 0x00));
+
+        CompatibilityPolicy deny =
+                (a, b) -> new CompatibilityReport(
+                        false, "consumer-denied", List.of(false));
+        BreedingContext context = new BreedingContext(
+                backbone,
+                1.0,
+                java.util.Set.of(),
+                deny,
+                false);
+
+        BreedingResult.NoViableOffspring failure = assertInstanceOf(
+                BreedingResult.NoViableOffspring.class,
+                engine.breed(
+                        profile,
+                        new BreedingParentSource.Gamete(
+                                new HaploidGenome(1, List.of(template))),
+                        new BreedingParentSource.Gamete(
+                                new HaploidGenome(1, List.of(template))),
+                        context,
+                        new SplitMix64GenomeRandom(3L)));
+
+        assertEquals(
+                BreedingFailureReason.COMPATIBILITY_POLICY_REJECTED,
+                failure.reason());
+        assertEquals("consumer-denied", failure.detail());
+    }
+
+    @Test
     void parentSourceChromosomeCountMismatchIsNormalFailure() {
         WonderfulGenomeEngine engine =
                 WonderfulGenomeEngine.create(EngineConfig.defaults());
