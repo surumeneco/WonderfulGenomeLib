@@ -56,11 +56,11 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
 
     @Override
     public CompatibilityReport assessCompatibility(
-            DiploidGenome a,
-            DiploidGenome b,
+            BreedingParentSource a,
+            BreedingParentSource b,
             CompatibilityPolicy policy){
-        requireGenomeV1(a);
-        requireGenomeV1(b);
+        requireParentSourceV1(a);
+        requireParentSourceV1(b);
         return (policy!=null?policy:new HomologyCompatibilityPolicyV1(config)).assess(a,b);
     }
 
@@ -85,12 +85,13 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
     @Override
     public BreedingResult breed(
             GenomeProfile<?> profile,
-            DiploidGenome a,
-            DiploidGenome b,
+            BreedingParentSource a,
+            BreedingParentSource b,
             BreedingContext context,
             GenomeRandom random){
-        requireGenomeV1(a);
-        requireGenomeV1(b);
+        requireParentSourceV1(a);
+        requireParentSourceV1(b);
+        Objects.requireNonNull(context, "context");
         requireBackboneV1(context.backbone());
         return breeding.breed(profile,a,b,context,random);
     }
@@ -147,6 +148,11 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
     private static void requireGenomeV1(DiploidGenome genome){
         Objects.requireNonNull(genome,"genome");
         requireFormatV1(genome.genomeFormatVersion());
+    }
+
+    private static void requireParentSourceV1(BreedingParentSource source){
+        Objects.requireNonNull(source,"source");
+        requireFormatV1(source.genomeFormatVersion());
     }
 
     private static void requireHaploidGenomeV1(HaploidGenome genome){
