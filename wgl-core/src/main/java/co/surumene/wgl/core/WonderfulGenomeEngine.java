@@ -13,6 +13,7 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
     private final GenomeDecoderEngine decoder;
     private final GenomeSynthesizer synthesizer;
     private final BreedingEngine breeding;
+    private final BackboneCompatibilityEngine backboneCompatibility;
     private final MarkerEngine marker=new MarkerEngine();
     private final GenomeSequenceCodec sequenceCodec=new GenomeSequenceCodecV1();
     private final GeneSequenceCodec geneSequenceCodec=new GeneSequenceCodecV1();
@@ -22,6 +23,7 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
         decoder=new GenomeDecoderEngine(config);
         synthesizer=new GenomeSynthesizer(config,decoder);
         breeding=new BreedingEngine(config,decoder);
+        backboneCompatibility=new BackboneCompatibilityEngine(config);
     }
 
     public static WonderfulGenomeEngine create(EngineConfig config){
@@ -60,6 +62,24 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
         requireGenomeV1(a);
         requireGenomeV1(b);
         return (policy!=null?policy:new HomologyCompatibilityPolicyV1(config)).assess(a,b);
+    }
+
+    @Override
+    public BackboneCompatibilityReport assessBackboneCompatibility(
+            BackboneDefinition backbone,
+            DiploidGenome genome){
+        requireBackboneV1(backbone);
+        requireGenomeV1(genome);
+        return backboneCompatibility.assess(backbone, genome);
+    }
+
+    @Override
+    public BackboneCompatibilityReport assessBackboneCompatibility(
+            BackboneDefinition backbone,
+            HaploidGenome genome){
+        requireBackboneV1(backbone);
+        requireHaploidGenomeV1(genome);
+        return backboneCompatibility.assess(backbone, genome);
     }
 
     @Override
@@ -125,6 +145,11 @@ public final class WonderfulGenomeEngine implements GenomeEngine {
     @Override public GeneSequenceCodec geneSequenceCodec(){return geneSequenceCodec;}
 
     private static void requireGenomeV1(DiploidGenome genome){
+        Objects.requireNonNull(genome,"genome");
+        requireFormatV1(genome.genomeFormatVersion());
+    }
+
+    private static void requireHaploidGenomeV1(HaploidGenome genome){
         Objects.requireNonNull(genome,"genome");
         requireFormatV1(genome.genomeFormatVersion());
     }
