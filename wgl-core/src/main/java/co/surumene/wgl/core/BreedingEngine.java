@@ -49,8 +49,12 @@ final class BreedingEngine {
                 : new HomologyCompatibilityPolicyV1(config);
         CompatibilityReport compatibility = policy.assess(parentA, parentB);
         if (!compatibility.compatible()) {
+            BreedingFailureReason reason =
+                    policy instanceof HomologyCompatibilityPolicyV1
+                            ? BreedingFailureReason.INSUFFICIENT_CROSS_PARENT_HOMOLOGY
+                            : BreedingFailureReason.COMPATIBILITY_POLICY_REJECTED;
             return new BreedingResult.NoViableOffspring(
-                    BreedingFailureReason.INSUFFICIENT_CROSS_PARENT_HOMOLOGY,
+                    reason,
                     compatibility.reason());
         }
 
