@@ -17,6 +17,14 @@ public interface GenomeEngine {
             DiploidGenome parentB,
             CompatibilityPolicy policy);
 
+    BackboneCompatibilityReport assessBackboneCompatibility(
+            BackboneDefinition backbone,
+            DiploidGenome genome);
+
+    BackboneCompatibilityReport assessBackboneCompatibility(
+            BackboneDefinition backbone,
+            HaploidGenome genome);
+
     BreedingResult breed(
             GenomeProfile<?> profile,
             DiploidGenome parentA,
