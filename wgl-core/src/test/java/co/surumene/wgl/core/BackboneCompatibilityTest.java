@@ -38,4 +38,38 @@ final class BackboneCompatibilityTest {
                 incompatibleReport.reason());
         assertEquals(List.of(false), incompatibleReport.compatibleChromosomes());
     }
+
+    @Test
+    void lengthSafetyRangeDoesNotDefineBackboneCompatibility() {
+        BackboneDefinition backbone = TestBackbones.singlePair(2048);
+        BitSequence template = backbone.chromosomes().getFirst().templateBits();
+        BitSequence oversized = template.concat(template);
+
+        assertFalse(backbone.safetyPolicy().isSafe(
+                List.of(oversized.bitLength()),
+                backbone.baselineChromosomeLengths()));
+
+        BackboneCompatibilityReport report =
+                engine.assessBackboneCompatibility(
+                        backbone,
+                        new HaploidGenome(1, List.of(oversized)));
+
+        assertTrue(report.compatible());
+        assertEquals(List.of(true), report.compatibleChromosomes());
+    }
+
+    @Test
+    void chromosomeCountMismatchIsDiagnosedSeparately() {
+        BackboneDefinition backbone = TestBackbones.singlePair(2048);
+        BitSequence template = backbone.chromosomes().getFirst().templateBits();
+
+        BackboneCompatibilityReport report =
+                engine.assessBackboneCompatibility(
+                        backbone,
+                        new HaploidGenome(1, List.of(template, template)));
+
+        assertFalse(report.compatible());
+        assertEquals("CHROMOSOME_COUNT_MISMATCH", report.reason());
+        assertTrue(report.compatibleChromosomes().isEmpty());
+    }
 }
