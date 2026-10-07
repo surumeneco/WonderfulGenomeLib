@@ -17,59 +17,105 @@ final class BreedingEngine {
         this.parser = new PhysicalGenomeDecoder(config);
     }
 
-    BreedingResult breed(GenomeProfile<?> profile, DiploidGenome parentA, DiploidGenome parentB,
-                         BreedingContext context, GenomeRandom random) {
+    BreedingResult breed(
+            GenomeProfile<?> profile,
+            BreedingParentSource parentA,
+            BreedingParentSource parentB,
+            BreedingContext context,
+            GenomeRandom random) {
         Objects.requireNonNull(profile, "profile");
         Objects.requireNonNull(parentA, "parentA");
         Objects.requireNonNull(parentB, "parentB");
         Objects.requireNonNull(context, "context");
         Objects.requireNonNull(random, "random");
 
-        if (parentA.chromosomePairCount() != parentB.chromosomePairCount()) {
-            return new BreedingResult.NoViableOffspring(BreedingFailureReason.CHROMOSOME_COUNT_MISMATCH,
-                    "parent chromosome pair counts differ");
+        if (parentA.chromosomeCount() != parentB.chromosomeCount()) {
+            return new BreedingResult.NoViableOffspring(
+                    BreedingFailureReason.CHROMOSOME_COUNT_MISMATCH,
+                    "parent chromosome counts differ");
         }
+
         BackboneDefinition backbone = context.backbone();
         if (parentA.genomeFormatVersion() != backbone.genomeFormatVersion()
                 || parentB.genomeFormatVersion() != backbone.genomeFormatVersion()
-                || parentA.chromosomePairCount() != backbone.chromosomes().size()) {
-            return new BreedingResult.NoViableOffspring(BreedingFailureReason.INVALID_PARENT_STRUCTURE,
+                || parentA.chromosomeCount() != backbone.chromosomes().size()) {
+            return new BreedingResult.NoViableOffspring(
+                    BreedingFailureReason.INVALID_PARENT_STRUCTURE,
                     "parent structure does not match breeding backbone");
         }
 
         CompatibilityPolicy policy = context.compatibilityPolicy() != null
-                ? context.compatibilityPolicy() : new HomologyCompatibilityPolicyV1(config);
+                ? context.compatibilityPolicy()
+                : new HomologyCompatibilityPolicyV1(config);
         CompatibilityReport compatibility = policy.assess(parentA, parentB);
         if (!compatibility.compatible()) {
-            return new BreedingResult.NoViableOffspring(BreedingFailureReason.INSUFFICIENT_CROSS_PARENT_HOMOLOGY,
+            return new BreedingResult.NoViableOffspring(
+                    BreedingFailureReason.INSUFFICIENT_CROSS_PARENT_HOMOLOGY,
                     compatibility.reason());
         }
 
         if (!validMeiosisPolicy(parentA, context.parentAPolicy())
                 || !validMeiosisPolicy(parentB, context.parentBPolicy())) {
-            return new BreedingResult.NoViableOffspring(BreedingFailureReason.CONSTRAINT_UNSATISFIABLE,
-                    "parent meiosis policy references an invalid physical block");
+            return new BreedingResult.NoViableOffspring(
+                    BreedingFailureReason.CONSTRAINT_UNSATISFIABLE,
+                    "parent meiosis policy cannot be applied to the selected source");
         }
 
-        List<BitSequence> gameteA = createGamete(profile, parentA, context, context.parentAPolicy(), random);
+        List<BitSequence> gameteA = resolveGamete(
+                profile, parentA, context, context.parentAPolicy(), random);
         if (gameteA == null) {
-            return new BreedingResult.NoViableOffspring(BreedingFailureReason.CONSTRAINT_UNSATISFIABLE,
+            return new BreedingResult.NoViableOffspring(
+                    BreedingFailureReason.CONSTRAINT_UNSATISFIABLE,
                     "parent A inheritance constraints could not be satisfied");
         }
-        List<BitSequence> gameteB = createGamete(profile, parentB, context, context.parentBPolicy(), random);
+
+        List<BitSequence> gameteB = resolveGamete(
+                profile, parentB, context, context.parentBPolicy(), random);
         if (gameteB == null) {
-            return new BreedingResult.NoViableOffspring(BreedingFailureReason.CONSTRAINT_UNSATISFIABLE,
+            return new BreedingResult.NoViableOffspring(
+                    BreedingFailureReason.CONSTRAINT_UNSATISFIABLE,
                     "parent B inheritance constraints could not be satisfied");
         }
+
         List<ChromosomePair> pairs = new ArrayList<>(gameteA.size());
-        for (int i = 0; i < gameteA.size(); i++) pairs.add(new ChromosomePair(gameteA.get(i), gameteB.get(i)));
-        DiploidGenome child = new DiploidGenome(parentA.genomeFormatVersion(), pairs);
+        for (int i = 0; i < gameteA.size(); i++) {
+            pairs.add(new ChromosomePair(gameteA.get(i), gameteB.get(i)));
+        }
+        DiploidGenome child =
+                new DiploidGenome(parentA.genomeFormatVersion(), pairs);
 
         if (!context.allowSafetyOverride() && !safeDiploid(backbone, child)) {
-            return new BreedingResult.NoViableOffspring(BreedingFailureReason.SAFETY_REJECTED,
+            return new BreedingResult.NoViableOffspring(
+                    BreedingFailureReason.SAFETY_REJECTED,
                     "offspring violates genome safety policy");
         }
         return new BreedingResult.Success(child, decoder.decode(profile, child));
+    }
+
+    private List<BitSequence> resolveGamete(
+            GenomeProfile<?> profile,
+            BreedingParentSource source,
+            BreedingContext context,
+            ParentMeiosisPolicy meiosisPolicy,
+            GenomeRandom random) {
+        if (source instanceof BreedingParentSource.Gamete gamete) {
+            return gamete.genome().chromosomes();
+        }
+        BreedingParentSource.DiploidParent diploid =
+                (BreedingParentSource.DiploidParent) source;
+        return createGamete(
+                profile, diploid.genome(), context, meiosisPolicy, random);
+    }
+
+    private static boolean validMeiosisPolicy(
+            BreedingParentSource source,
+            ParentMeiosisPolicy policy) {
+        if (source instanceof BreedingParentSource.Gamete) {
+            return policy.inheritanceConstraints().isEmpty();
+        }
+        return validMeiosisPolicy(
+                ((BreedingParentSource.DiploidParent) source).genome(),
+                policy);
     }
 
     private List<BitSequence> createGamete(GenomeProfile<?> profile, DiploidGenome parent,

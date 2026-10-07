@@ -4,7 +4,7 @@ Wonderful Genome Lib (WGL) is the shared physical-genome engine for XPlayServer 
 
 ## Consumer entrypoint
 
-Plugins that use WGL should start with [docs/consumer-integration.md](docs/consumer-integration.md). It documents the current SNAPSHOT dependency setup, Paper service acquisition, Profile lifecycle, public `GenomeEngine` operations, persistence boundary, and working consumer examples.
+Plugins that use WGL should start with [docs/consumer-integration.md](docs/consumer-integration.md). It documents the current SNAPSHOT dependency setup, Paper service acquisition, Profile lifecycle, public `GenomeEngine` operations, typed diploid/gamete parent sources, Backbone compatibility checks, persistence boundary, and working consumer examples.
 
 The current development dependency is `co.surumene:wgl-plugin:0.1.0-SNAPSHOT`. WGL remains a separate Paper plugin at runtime; consumer JARs must not bundle WGL classes.
 
