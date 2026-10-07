@@ -11,16 +11,35 @@ public interface GenomeEngine {
                                        SynthesisTarget target, SynthesisContext context, long seed) {
         return synthesize(profile, backbone, target, context, standardRandom(seed));
     }
-    CompatibilityReport assessCompatibility(DiploidGenome parentA, DiploidGenome parentB, CompatibilityPolicy policy);
-    BreedingResult breed(GenomeProfile<?> profile, DiploidGenome parentA, DiploidGenome parentB,
-                         BreedingContext context, GenomeRandom random);
 
-    default BreedingResult breed(GenomeProfile<?> profile, DiploidGenome parentA, DiploidGenome parentB,
-                                 BreedingContext context, long seed) {
+    CompatibilityReport assessCompatibility(
+            DiploidGenome parentA,
+            DiploidGenome parentB,
+            CompatibilityPolicy policy);
+
+    BreedingResult breed(
+            GenomeProfile<?> profile,
+            DiploidGenome parentA,
+            DiploidGenome parentB,
+            BreedingContext context,
+            GenomeRandom random);
+
+    default BreedingResult breed(
+            GenomeProfile<?> profile,
+            DiploidGenome parentA,
+            DiploidGenome parentB,
+            BreedingContext context,
+            long seed) {
         return breed(profile, parentA, parentB, context, standardRandom(seed));
     }
+
     byte[] encode(DiploidGenome genome);
     DiploidGenome decodeBinary(byte[] bytes);
+
+    byte[] encodeParentSource(BreedingParentSource source);
+    BreedingParentSource decodeParentSource(byte[] bytes);
+    BreedingParentSourceCodec parentSourceCodec();
+
     MarkerResult marker(BackboneDefinition backbone, DiploidGenome genome);
     MarkerResult marker(BackboneDefinition backbone, DiploidGenome genome, MarkerScheme scheme);
     GenomeSequenceCodec sequenceCodec();
