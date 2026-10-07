@@ -212,19 +212,31 @@ SynthesisResult synthesize(
     GenomeRandom random);
 
 CompatibilityReport assessCompatibility(
-    DiploidGenome parentA,
-    DiploidGenome parentB,
+    BreedingParentSource parentA,
+    BreedingParentSource parentB,
     CompatibilityPolicy policy);
+
+BackboneCompatibilityReport assessBackboneCompatibility(
+    BackboneDefinition backbone,
+    DiploidGenome genome);
+
+BackboneCompatibilityReport assessBackboneCompatibility(
+    BackboneDefinition backbone,
+    HaploidGenome genome);
 
 BreedingResult breed(
     GenomeProfile<?> profile,
-    DiploidGenome parentA,
-    DiploidGenome parentB,
+    BreedingParentSource parentA,
+    BreedingParentSource parentB,
     BreedingContext context,
     GenomeRandom random);
 
 byte[] encode(DiploidGenome genome);
 DiploidGenome decodeBinary(byte[] bytes);
+
+byte[] encodeParentSource(BreedingParentSource source);
+BreedingParentSource decodeParentSource(byte[] bytes);
+BreedingParentSourceCodec parentSourceCodec();
 
 MarkerResult marker(BackboneDefinition backbone, DiploidGenome genome);
 MarkerResult marker(
@@ -296,18 +308,33 @@ Targetをどう抽選するかはconsumer責務です。WGLは渡された `Synt
 
 ## 11. Breeding
 
+親入力は `BreedingParentSource` で明示します。
+
+- `BreedingParentSource.DiploidParent(DiploidGenome)`: WGLが通常の減数分裂、組換え、NAHR、構造変異、点突然変異を行って配偶子を生成します。
+- `BreedingParentSource.Gamete(HaploidGenome)`: 親から子へ渡る配偶子が既に確定済みの入力です。この側へ減数分裂・組換え・変異を再実行しません。
+- Diploid × Diploid、Diploid × Gamete、Gamete × Gameteを任意に組み合わせられます。
+
 最小例:
 
 ```java
 BreedingContext context = BreedingContext.standard(backbone);
 
+BreedingParentSource sourceA =
+        new BreedingParentSource.DiploidParent(parentA);
+BreedingParentSource sourceB =
+        new BreedingParentSource.Gamete(gameteB);
+
 BreedingResult result = wgl.engine().breed(
         profile,
-        parentA,
-        parentB,
+        sourceA,
+        sourceB,
         context,
         seed);
 ```
+
+従来の `DiploidGenome × DiploidGenome` overloadも互換用に利用できます。内部では両親を `DiploidParent` として扱います。
+
+cross-parent HomologyはWGLが入力形態に応じて評価します。標準policyでは各染色体indexごとに、Diploid × Diploidは2×2、Diploid × Gameteは2×1、Gamete × Gameteは1×1のhaplotype組合せを評価し、通常Homology Blockが1つも成立しないindexがあれば `INSUFFICIENT_CROSS_PARENT_HOMOLOGY` を返します。
 
 結果:
 
@@ -333,7 +360,24 @@ if (result instanceof BreedingResult.Success success) {
 | `INVALID_PARENT_STRUCTURE` | 親Genome構造が繁殖入力として不正 |
 | `SAFETY_REJECTED` | Genome safety policyで拒否 |
 
-de novo禁止Address、mutation倍率、親別meiosis policy等が必要な場合は `BreedingContext` へ渡します。
+de novo禁止Address、mutation倍率、親別meiosis policy等が必要な場合は `BreedingContext` へ渡します。確定済み `Gamete` 側にはmeiosis policyを適用できないため、その側へ継承制約を指定すると `CONSTRAINT_UNSATISFIABLE` になります。
+
+### Backbone Compatibility
+
+cross-parent Homologyとは別に、任意Genomeが対象consumerのBackboneから派生したものとして十分な物理Homologyを持つか確認できます。
+
+```java
+BackboneCompatibilityReport report =
+        wgl.engine().assessBackboneCompatibility(backbone, genome);
+
+if (!report.compatible()) {
+    // report.reason() / report.compatibleChromosomes() で診断
+}
+```
+
+`DiploidGenome` と `HaploidGenome` の両方を評価できます。Standard Backbone Compatibility V1はBackbone IDではなく実配列を評価し、各染色体indexに通常Homology Blockが1つ以上あることを要求します。二倍体では2 haplotypeのどちらか一方が適合すればそのindexを適合とします。通常繁殖用の長さSafety範囲外であることだけではBackbone非互換にはしません。
+
+通常繁殖や親Genome指定生成では、consumerが対象Backboneへの適合性を確認してから `breed(...)` へ渡します。
 
 ## 12. Binary persistence
 
@@ -352,6 +396,16 @@ DiploidGenome genome = wgl.engine().decodeBinary(genomeBytes);
 ```
 
 Binary containerにはProfile ID、Backbone ID、Phenotype Snapshot、Entity情報を含みません。それらが必要ならconsumer側の保存形式で別途保持します。
+
+完全な二倍体親と確定済みgameteを型付きで外部受け渡しする場合は、`WGLP` Parent Source Container V1を使用します。
+
+```java
+byte[] sourceBytes = wgl.engine().encodeParentSource(source);
+BreedingParentSource restored =
+        wgl.engine().decodeParentSource(sourceBytes);
+```
+
+`DiploidParent` payloadは既存 `WGLG`、`Gamete` payloadはcanonical haploid containerとして保存され、source typeと全bit列を損失なく復元します。既存個体のPDC保存を `WGLP` へ変更する必要はなく、通常の個体Genome保存には引き続き `WGLG` を使用できます。
 
 ## 13. text representation
 
