@@ -989,14 +989,25 @@ final class GenomeSynthesizer {
         }
 
         private int randomSafeBoundary(GenomeRandom random) {
-            int count = 0;
-            for (int p = 0; p <= bits.bitLength(); p++) if (safe(p)) count++;
-            if (count == 0) return bits.bitLength();
-            int pick = random.nextInt(count);
-            for (int p = 0; p <= bits.bitLength(); p++) {
-                if (!safe(p)) continue;
-                if (pick-- == 0) return p;
+            // A boundary is unsafe only strictly inside a protected interval.
+            // Select uniformly from all valid integer boundaries without checking
+            // and sorting the same protected regions for every bit position.
+            List<Interval> regions = protectedRegions();
+            int safeCount = bits.bitLength() + 1;
+            for (Interval interval : regions) {
+                safeCount -= Math.max(0, interval.end() - interval.start() - 1);
             }
+            if (safeCount == 0) return bits.bitLength();
+
+            int pick = random.nextInt(safeCount);
+            int cursor = 0;
+            for (Interval interval : regions) {
+                int available = interval.start() - cursor + 1;
+                if (pick < available) return cursor + pick;
+                pick -= available;
+                cursor = interval.end();
+            }
+            if (pick <= bits.bitLength() - cursor) return cursor + pick;
             throw new IllegalStateException("failed to choose safe scaffold boundary");
         }
 
