@@ -15,8 +15,8 @@ public final class HomologyEngine {
         List<HomologyCandidate> candidates=new ArrayList<>();
         for(int pa=0;pa<=a.bitLength()-ANCHOR_BITS;pa++){
             long aw=a.toLong(pa,ANCHOR_BITS);
-            addCandidates(candidates,aw,pa,b,forward,HomologyOrientation.FORWARD);
-            addCandidates(candidates,aw,pa,b,reverse,HomologyOrientation.REVERSE);
+            addCandidates(candidates,aw,pa,forward,HomologyOrientation.FORWARD);
+            addCandidates(candidates,aw,pa,reverse,HomologyOrientation.REVERSE);
         }
         candidates.sort(Comparator.comparingInt(HomologyCandidate::positionA)
                 .thenComparingInt(HomologyCandidate::positionB)
@@ -28,15 +28,22 @@ public final class HomologyEngine {
         return new HomologyMap(candidates,blocks,ambiguous);
     }
 
-    private static void addCandidates(List<HomologyCandidate> out,long aw,int pa,BitSequence b,ChunkIndex index,HomologyOrientation orientation){
-        TreeSet<Integer> positions=new TreeSet<>();
-        for(int chunk=0;chunk<3;chunk++){
-            int shift=32-16*chunk; int key=(int)((aw>>>shift)&0xFFFFL);
-            List<Integer> ps=index.positions[chunk].get(key); if(ps!=null)positions.addAll(ps);
-        }
-        for(int pb:positions){
-            long bw=index.window(pb); int h=Long.bitCount((aw^bw)&0xFFFFFFFFFFFFL);
-            if(h<=2)out.add(new HomologyCandidate(pa,pb,orientation,h));
+    private static void addCandidates(List<HomologyCandidate> out,long aw,int pa,ChunkIndex index,HomologyOrientation orientation){
+        // A <=2-bit mismatch in 48 bits must contain at least one identical
+        // 16-bit slice. The three index buckets are therefore exhaustive.
+        // Use generation stamps rather than allocating/sorting a TreeSet per A window.
+        int generation = pa + 1;
+        for (int chunk=0;chunk<3;chunk++) {
+            int shift=32-16*chunk;
+            int key=(int)((aw>>>shift)&0xFFFFL);
+            List<Integer> ps=index.positions[chunk].get(key);
+            if (ps == null) continue;
+            for (int pb : ps) {
+                if (index.visited[pb] == generation) continue;
+                index.visited[pb] = generation;
+                int h=Long.bitCount((aw^index.window(pb))&0xFFFFFFFFFFFFL);
+                if (h<=2) out.add(new HomologyCandidate(pa,pb,orientation,h));
+            }
         }
     }
 
@@ -65,6 +72,9 @@ public final class HomologyEngine {
         int[] startA = new int[n];
         int[] startB = new int[n];
         Arrays.fill(prev, -1);
+        // The exponential depends only on the integer displacement difference;
+        // reuse identical values without changing strict floating-point semantics.
+        Map<Integer, Double> gapWeights = new HashMap<>();
         for (int i = 0; i < n; i++) {
             HomologyCandidate cur = cands.get(i);
             score[i] = cur.anchorQuality();
@@ -77,7 +87,8 @@ public final class HomologyEngine {
                 if (da > config.homology().maxAnchorGapBits()) break;
                 int db = cur.positionB() - prior.positionB();
                 if (da <= 0 || db <= 0 || db > config.homology().maxAnchorGapBits()) continue;
-                double qGap = StrictMath.exp(-StrictMath.abs(da - db) / 256.0);
+                double qGap = gapWeights.computeIfAbsent(Math.abs(da - db),
+                        displacement -> StrictMath.exp(-displacement / 256.0));
                 double candidateScore = score[j] + cur.anchorQuality() * qGap;
                 int candidateCount = count[j] + 1;
                 long candidateError = gapError[j] + StrictMath.abs(da - db);
@@ -142,8 +153,9 @@ public final class HomologyEngine {
     private static final class ChunkIndex {
         final Map<Integer,List<Integer>>[] positions=new Map[]{new HashMap<>(),new HashMap<>(),new HashMap<>()};
         final long[] windows;
+        final int[] visited;
         ChunkIndex(BitSequence b,boolean reversed){
-            int n=b.bitLength()-ANCHOR_BITS+1;windows=new long[n];
+            int n=b.bitLength()-ANCHOR_BITS+1;windows=new long[n];visited=new int[n];
             for(int p=0;p<n;p++){
                 long raw=b.toLong(p,ANCHOR_BITS); long w=reversed?reverse48(raw):raw;windows[p]=w;
                 positions[0].computeIfAbsent((int)((w>>>32)&0xFFFF),k->new ArrayList<>()).add(p);
@@ -152,6 +164,6 @@ public final class HomologyEngine {
             }
         }
         long window(int p){return windows[p];}
-        private static long reverse48(long x){long r=0;for(int i=0;i<48;i++){r=(r<<1)|(x&1L);x>>>=1;}return r;}
+        private static long reverse48(long x){return Long.reverse(x) >>> 16;}
     }
 }
