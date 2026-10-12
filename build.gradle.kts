@@ -33,6 +33,7 @@ subprojects {
 
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+        testLogging.showStandardStreams = true
     }
 }
 
