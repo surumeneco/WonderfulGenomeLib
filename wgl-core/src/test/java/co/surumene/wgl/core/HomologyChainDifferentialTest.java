@@ -63,6 +63,24 @@ final class HomologyChainDifferentialTest {
         assertEquals(referenceChain(candidates, 1024), invokeChain(engine, candidates));
     }
 
+    @Test
+    void singleDiagonalReferenceParityAcrossLargeGapsAndVariableAnchorQuality() throws Exception {
+        HomologyEngine engine = new HomologyEngine(EngineConfig.defaults());
+        Random random = new Random(0x4000_77ABL);
+        for (int scenario = 0; scenario < 16; scenario++) {
+            ArrayList<HomologyCandidate> candidates = new ArrayList<>();
+            int a = 0;
+            for (int i = 0; i < 270; i++) {
+                a += scenario % 2 == 0 && i % 47 == 0 ? 1025 + random.nextInt(128)
+                        : 1 + random.nextInt(scenario % 3 == 0 ? 50 : 5);
+                candidates.add(new HomologyCandidate(a, a + 17,
+                        HomologyOrientation.FORWARD, random.nextInt(3)));
+            }
+            assertEquals(referenceChain(candidates, 1024), invokeChain(engine, candidates),
+                    "single diagonal scenario " + scenario);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static List<HomologyCandidate> invokeChain(HomologyEngine engine,
             List<HomologyCandidate> input) throws Exception {
