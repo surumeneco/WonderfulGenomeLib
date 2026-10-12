@@ -95,6 +95,11 @@ public final class HomologyEngine {
                 if (da > config.homology().maxAnchorGapBits()) break;
                 int db = cur.positionB() - prior.positionB();
                 if (da <= 0 || db <= 0 || db > config.homology().maxAnchorGapBits()) continue;
+                // exp(-abs(da-db)/256) is in (0, 1], so even the best
+                // possible transition from this predecessor cannot win if
+                // its upper-bound score is already below the incumbent.
+                // Equality must still be evaluated for original tie breaks.
+                if (score[j] + cur.anchorQuality() < score[i]) continue;
                 double qGap = gapWeights.computeIfAbsent(Math.abs(da - db),
                         displacement -> StrictMath.exp(-displacement / 256.0));
                 double candidateScore = score[j] + cur.anchorQuality() * qGap;
