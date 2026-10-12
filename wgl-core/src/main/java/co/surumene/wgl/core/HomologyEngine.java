@@ -83,63 +83,32 @@ public final class HomologyEngine {
         // The exponential depends only on the integer displacement difference;
         // reuse identical values without changing strict floating-point semantics.
         Map<Integer, Double> gapWeights = new HashMap<>();
-        // Candidates arrive sorted by positionA, positionB. Only a strictly
-        // earlier positionA can contribute to a forward-monotone chain.
-        // Group boundaries let us omit those invalid same-A comparisons.
-        int[] groupStart = new int[n];
-        int start = 0;
-        for (int i = 0; i < n; i++) {
-            if (i > 0 && cands.get(i).positionA() != cands.get(i - 1).positionA()) {
-                start = i;
-            }
-            groupStart[i] = start;
-        }
-        int maxGap = config.homology().maxAnchorGapBits();
         for (int i = 0; i < n; i++) {
             HomologyCandidate cur = cands.get(i);
             score[i] = cur.anchorQuality();
             count[i] = 1;
             startA[i] = cur.positionA();
             startB[i] = cur.positionB();
-            // Visit prior A-groups in exactly the same descending candidate
-            // order as the quadratic implementation (preserves equal-score
-            // tie-breaking and the chosen predecessor chain).
-            for (int end = groupStart[i]; end > 0; ) {
-                int begin = groupStart[end - 1];
-                int da = cur.positionA() - cands.get(end - 1).positionA();
-                if (da > maxGap) break;
-
-                int from = begin;
-                int to = end;
-                if (end - begin > 8) {
-                    // Inside each A-group, B is sorted. Candidates with
-                    // B >= currentB or B < currentB-maxGap are impossible
-                    // predecessors. Binary search avoids visiting them.
-                    from = firstPositionBAtLeast(cands, begin, end,
-                            cur.positionB() - maxGap);
-                    to = firstPositionBAtLeast(cands, from, end,
-                            cur.positionB());
+            for (int j = i - 1; j >= 0; j--) {
+                HomologyCandidate prior = cands.get(j);
+                int da = cur.positionA() - prior.positionA();
+                if (da > config.homology().maxAnchorGapBits()) break;
+                int db = cur.positionB() - prior.positionB();
+                if (da <= 0 || db <= 0 || db > config.homology().maxAnchorGapBits()) continue;
+                double qGap = gapWeights.computeIfAbsent(Math.abs(da - db),
+                        displacement -> StrictMath.exp(-displacement / 256.0));
+                double candidateScore = score[j] + cur.anchorQuality() * qGap;
+                int candidateCount = count[j] + 1;
+                long candidateError = gapError[j] + StrictMath.abs(da - db);
+                if (better(candidateScore, candidateCount, candidateError, startA[j],
+                        score[i], count[i], gapError[i], startA[i])) {
+                    score[i] = candidateScore;
+                    count[i] = candidateCount;
+                    gapError[i] = candidateError;
+                    prev[i] = j;
+                    startA[i] = startA[j];
+                    startB[i] = startB[j];
                 }
-                for (int j = to - 1; j >= from; j--) {
-                    HomologyCandidate prior = cands.get(j);
-                    int db = cur.positionB() - prior.positionB();
-                    if (db <= 0 || db > maxGap) continue;
-                    double qGap = gapWeights.computeIfAbsent(Math.abs(da - db),
-                            displacement -> StrictMath.exp(-displacement / 256.0));
-                    double candidateScore = score[j] + cur.anchorQuality() * qGap;
-                    int candidateCount = count[j] + 1;
-                    long candidateError = gapError[j] + StrictMath.abs(da - db);
-                    if (better(candidateScore, candidateCount, candidateError, startA[j],
-                            score[i], count[i], gapError[i], startA[i])) {
-                        score[i] = candidateScore;
-                        count[i] = candidateCount;
-                        gapError[i] = candidateError;
-                        prev[i] = j;
-                        startA[i] = startA[j];
-                        startB[i] = startB[j];
-                    }
-                }
-                end = begin;
             }
         }
 
@@ -205,16 +174,6 @@ public final class HomologyEngine {
         }
         return best < 0 ? List.of()
                 : List.copyOf(cands.subList(best - count[best] + 1, best + 1));
-    }
-
-    private static int firstPositionBAtLeast(
-            List<HomologyCandidate> cands, int from, int to, int minimumB) {
-        while (from < to) {
-            int mid = from + (to - from) / 2;
-            if (cands.get(mid).positionB() < minimumB) from = mid + 1;
-            else to = mid;
-        }
-        return from;
     }
 
     private static List<HomologyCandidate> reconstruct(List<HomologyCandidate> cands, int[] prev, int endpoint) {
