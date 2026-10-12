@@ -81,6 +81,61 @@ final class HomologyChainDifferentialTest {
         }
     }
 
+
+    @Test
+    void reportsSameJvmReferenceComparisonOnControlledCandidateSets() throws Exception {
+        List<HomologyCandidate> single = new ArrayList<>();
+        for (int i = 0; i < 1800; i++) {
+            int position = i * 2;
+            single.add(new HomologyCandidate(position, position + 23,
+                    HomologyOrientation.FORWARD, i % 3));
+        }
+        List<HomologyCandidate> clustered = new ArrayList<>();
+        for (int group = 0; group < 65; group++) {
+            for (int k = 0; k < 24; k++) {
+                clustered.add(new HomologyCandidate(group * 25, group * 18 + k * 230,
+                        HomologyOrientation.FORWARD, k % 3));
+            }
+        }
+        clustered.sort(ORDER);
+        benchmarkScenario("single-diagonal", single);
+        benchmarkScenario("clustered-multi-diagonal", clustered);
+    }
+
+    private static void benchmarkScenario(String name, List<HomologyCandidate> cands)
+            throws Exception {
+        HomologyEngine engine = new HomologyEngine(EngineConfig.defaults());
+        List<HomologyCandidate> expected = referenceChain(cands, 1024);
+        assertEquals(expected, invokeChain(engine, cands), name);
+        for (int warmup = 0; warmup < 3; warmup++) {
+            referenceChain(cands, 1024);
+            invokeChain(engine, cands);
+        }
+        long referenceNs = 0;
+        long optimizedNs = 0;
+        for (int iteration = 0; iteration < 5; iteration++) {
+            if ((iteration & 1) == 0) {
+                long start = System.nanoTime();
+                referenceChain(cands, 1024);
+                referenceNs += System.nanoTime() - start;
+                start = System.nanoTime();
+                invokeChain(engine, cands);
+                optimizedNs += System.nanoTime() - start;
+            } else {
+                long start = System.nanoTime();
+                invokeChain(engine, cands);
+                optimizedNs += System.nanoTime() - start;
+                start = System.nanoTime();
+                referenceChain(cands, 1024);
+                referenceNs += System.nanoTime() - start;
+            }
+        }
+        System.out.printf(java.util.Locale.ROOT,
+                "HOMOLOGY_CHAIN_BENCH scenario=%s n=%d original_ms=%.3f optimized_ms=%.3f ratio=%.2f%n",
+                name, cands.size(), referenceNs / 1e6 / 5, optimizedNs / 1e6 / 5,
+                (double) referenceNs / Math.max(optimizedNs, 1L));
+    }
+
     @SuppressWarnings("unchecked")
     private static List<HomologyCandidate> invokeChain(HomologyEngine engine,
             List<HomologyCandidate> input) throws Exception {
