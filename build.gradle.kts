@@ -33,6 +33,8 @@ subprojects {
 
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+        // Emit measured benchmark diagnostics from JUnit during this investigation.
+        testLogging.showStandardStreams = true
     }
 }
 
