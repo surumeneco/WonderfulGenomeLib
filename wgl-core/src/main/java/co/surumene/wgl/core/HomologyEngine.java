@@ -64,6 +64,14 @@ public final class HomologyEngine {
     }
 
     private List<HomologyCandidate> bestValidChain(List<HomologyCandidate> cands) {
+        // A single ordered diagonal is the common case for homologous
+        // sequences without insertions/deletions. Every valid predecessor
+        // contributes the same qGap=1, so the immediately previous anchor
+        // has the strictly greatest score within each gap-connected run.
+        // Keep the full DP for cross-diagonal and repeated-anchor cases.
+        if (isSingleOrderedDiagonal(cands)) {
+            return bestSingleDiagonalChain(cands);
+        }
         int n = cands.size();
         double[] score = new double[n];
         int[] count = new int[n];
@@ -146,6 +154,57 @@ public final class HomologyEngine {
                     score[best], count[best], gapError[best], startA[best])) best = i;
         }
         return best < 0 ? List.of() : reconstruct(cands, prev, best);
+    }
+
+    private static boolean isSingleOrderedDiagonal(List<HomologyCandidate> cands) {
+        if (cands.size() < 2) return false;
+        HomologyCandidate first = cands.get(0);
+        long diagonal = (long) first.positionA() - first.positionB();
+        int previousA = first.positionA();
+        for (int i = 1; i < cands.size(); i++) {
+            HomologyCandidate next = cands.get(i);
+            if (next.positionA() <= previousA
+                    || (long) next.positionA() - next.positionB() != diagonal) {
+                return false;
+            }
+            previousA = next.positionA();
+        }
+        return true;
+    }
+
+    private List<HomologyCandidate> bestSingleDiagonalChain(List<HomologyCandidate> cands) {
+        int n = cands.size();
+        double[] score = new double[n];
+        int[] count = new int[n];
+        int[] startA = new int[n];
+        int[] startB = new int[n];
+        int maxGap = config.homology().maxAnchorGapBits();
+        for (int i = 0; i < n; i++) {
+            HomologyCandidate current = cands.get(i);
+            score[i] = current.anchorQuality();
+            count[i] = 1;
+            startA[i] = current.positionA();
+            startB[i] = current.positionB();
+            if (i > 0 && current.positionA() - cands.get(i - 1).positionA() <= maxGap) {
+                // Exact original DP arithmetic: qGap=StrictMath.exp(0)=1.0.
+                score[i] = score[i - 1] + current.anchorQuality() * 1.0;
+                count[i] = count[i - 1] + 1;
+                startA[i] = startA[i - 1];
+                startB[i] = startB[i - 1];
+            }
+        }
+        int best = -1;
+        for (int i = 0; i < n; i++) {
+            if (count[i] < 2) continue;
+            HomologyCandidate last = cands.get(i);
+            int physical = Math.min(last.positionA() - startA[i] + ANCHOR_BITS,
+                    last.positionB() - startB[i] + ANCHOR_BITS);
+            if (physical < 256) continue;
+            if (best < 0 || better(score[i], count[i], 0, startA[i],
+                    score[best], count[best], 0, startA[best])) best = i;
+        }
+        return best < 0 ? List.of()
+                : List.copyOf(cands.subList(best - count[best] + 1, best + 1));
     }
 
     private static int firstPositionBAtLeast(
