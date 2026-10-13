@@ -165,11 +165,16 @@ final class GenomeSynthesizer {
             BitSequence gene = GeneCodecV1.encode(address, negative, magnitude, 15, extension);
             BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
 
-            List<MutableScaffold> trialA = copyScaffolds(a);
-            List<MutableScaffold> trialB = copyScaffolds(b);
+            // The trial edits exactly one haplotype. Share immutable sibling
+            // snapshots and copy only the scaffold whose intervals will move.
+            List<MutableScaffold> trialA = new ArrayList<>(a);
+            List<MutableScaffold> trialB = new ArrayList<>(b);
             int chromosome = weightedChromosome(backbone, random);
-            MutableScaffold scaffold = random.nextBoolean()
-                    ? trialA.get(chromosome) : trialB.get(chromosome);
+            boolean editA = random.nextBoolean();
+            MutableScaffold scaffold = editA
+                    ? trialA.get(chromosome).copy() : trialB.get(chromosome).copy();
+            if (editA) trialA.set(chromosome, scaffold);
+            else trialB.set(chromosome, scaffold);
             scaffold.insertGeneratedAtSafeBoundary(spacer.concat(gene), random, address);
 
             DiploidGenome genome = currentGenome(backbone, trialA, trialB);
@@ -320,12 +325,14 @@ final class GenomeSynthesizer {
                     micro.magnitude(), micro.expression(), extension);
             BitSequence spacer = nonCodingSpacer(random, 8 + random.nextInt(25));
 
-            List<MutableScaffold> trialA = copyScaffolds(a);
-            List<MutableScaffold> trialB = copyScaffolds(b);
+            List<MutableScaffold> trialA = new ArrayList<>(a);
+            List<MutableScaffold> trialB = new ArrayList<>(b);
             int chromosome = weightedChromosome(backbone, random);
             int haplotype = random.nextBoolean() ? 0 : 1;
             MutableScaffold scaffold = haplotype == 0
-                    ? trialA.get(chromosome) : trialB.get(chromosome);
+                    ? trialA.get(chromosome).copy() : trialB.get(chromosome).copy();
+            if (haplotype == 0) trialA.set(chromosome, scaffold);
+            else trialB.set(chromosome, scaffold);
             int insertion = scaffold.insertGeneratedAtSafeBoundary(
                     spacer.concat(gene), random, residual.address());
             int geneStart = insertion + spacer.bitLength();
