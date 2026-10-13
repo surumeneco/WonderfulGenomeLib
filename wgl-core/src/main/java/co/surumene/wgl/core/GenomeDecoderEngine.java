@@ -10,6 +10,11 @@ final class GenomeDecoderEngine {
     GenomeDecoderEngine(EngineConfig config){this.config=config;this.parser=new PhysicalGenomeDecoder(config);}
 
     <P> DecodeResult<P> decode(GenomeProfile<P> profile,DiploidGenome genome){
+        return decode(profile, genome, null);
+    }
+
+    <P> DecodeResult<P> decode(GenomeProfile<P> profile,DiploidGenome genome,
+                               HomologyCache homologyCache){
         List<LocatedGene> genes=parseGenome(profile,genome);
         List<LocatedGene> direct=genes.stream().filter(g->g.gene.addressValid()&&!g.gene.regulation()).toList();
         List<LocatedGene> regulation=genes.stream().filter(g->g.gene.regulation()).toList();
@@ -55,26 +60,66 @@ final class GenomeDecoderEngine {
         for(var entry:byAddress.entrySet()) aggregates.put(entry.getKey(),aggregate(entry.getValue()));
         List<DecodedGene> physical=genes.stream().sorted(LocatedGene.ORDER).map(x->x.gene).toList();
         List<DecodedHomologyBlock> homologyBlocks = profile.requiresHomologyContext()
-                ? homologyBlocks(genome)
+                ? homologyBlocks(genome, homologyCache)
                 : List.of();
         DecodedGenome decoded=new DecodedGenome(aggregates,physical,homologyBlocks);
         P phenotype=profile.mapPhenotype(decoded);
         return new DecodeResult<>(decoded,phenotype,new DecoderIdentity(WonderfulGenomeEngine.ENGINE_REVISION,config.decoderFingerprint(),profile.descriptor()));
     }
 
-    private List<DecodedHomologyBlock> homologyBlocks(DiploidGenome genome) {
+    /**
+     * One synthesis invocation, at most one immutable pair/blocks snapshot per
+     * chromosome index. No global cache, no thread-local state or Profile reuse.
+     * A change to either haplotype invalidates just that chromosome's entry.
+     */
+    static final class HomologyCache {
+        private final List<ChromosomePair> pairs = new ArrayList<>();
+        private final List<List<DecodedHomologyBlock>> blocks = new ArrayList<>();
+        private int computedPairs;
+        private int reusedPairs;
+
+        List<DecodedHomologyBlock> resolve(
+                int chromosome, ChromosomePair pair, HomologyEngine homology) {
+            while (pairs.size() <= chromosome) {
+                pairs.add(null);
+                blocks.add(null);
+            }
+            if (pair.equals(pairs.get(chromosome))) {
+                reusedPairs++;
+                return blocks.get(chromosome);
+            }
+            HomologyMap map = homology.analyze(pair.haplotypeA(), pair.haplotypeB());
+            List<DecodedHomologyBlock> result = new ArrayList<>(map.blocks().size());
+            for (HomologyBlock block : map.blocks()) {
+                result.add(new DecodedHomologyBlock(
+                        chromosome, block.startA(), block.endA(), block.startB(), block.endB()));
+            }
+            List<DecodedHomologyBlock> immutable = List.copyOf(result);
+            pairs.set(chromosome, pair);
+            blocks.set(chromosome, immutable);
+            computedPairs++;
+            return immutable;
+        }
+
+        int computedPairs() { return computedPairs; }
+        int reusedPairs() { return reusedPairs; }
+    }
+
+    private List<DecodedHomologyBlock> homologyBlocks(
+            DiploidGenome genome, HomologyCache cache) {
         HomologyEngine homology = new HomologyEngine(config);
         List<DecodedHomologyBlock> out = new ArrayList<>();
         for (int chromosome = 0; chromosome < genome.chromosomePairs().size(); chromosome++) {
             ChromosomePair pair = genome.chromosomePairs().get(chromosome);
-            HomologyMap map = homology.analyze(pair.haplotypeA(), pair.haplotypeB());
-            for (HomologyBlock block : map.blocks()) {
-                out.add(new DecodedHomologyBlock(
-                        chromosome,
-                        block.startA(),
-                        block.endA(),
-                        block.startB(),
-                        block.endB()));
+            if (cache != null) {
+                out.addAll(cache.resolve(chromosome, pair, homology));
+            } else {
+                HomologyMap map = homology.analyze(pair.haplotypeA(), pair.haplotypeB());
+                for (HomologyBlock block : map.blocks()) {
+                    out.add(new DecodedHomologyBlock(
+                            chromosome, block.startA(), block.endA(),
+                            block.startB(), block.endB()));
+                }
             }
         }
         return List.copyOf(out);
