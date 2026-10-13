@@ -135,7 +135,8 @@ final class BreedingEngine {
             TrackedSequence b = TrackedSequence.snapshot(pair.haplotypeB(), chromosome * 2 + 1, rateB);
             sourceChromatids.add(a);
             sourceChromatids.add(b);
-            pairs.add(new PairSnapshot(a, b, rateA, rateB));
+            pairs.add(new PairSnapshot(a, b, rateA, rateB,
+                    new HomologyPairMemo(a.bits(), b.bits())));
         }
         ProvenanceGuard guard = ProvenanceGuard.capture(profile, parser,
                 context.deNovoForbiddenAddresses(), sourceChromatids);
@@ -196,7 +197,7 @@ final class BreedingEngine {
         // Alternative homolog mappings: normal-chain anchors are excluded; ambiguous alternatives remain.
         for (int chromosome = 0; chromosome < pairs.size(); chromosome++) {
             PairSnapshot pair = pairs.get(chromosome);
-            HomologyMap map = homology.analyze(pair.a().bits(), pair.b().bits());
+            HomologyMap map = pair.homologyMemo().analyze(homology);
             Set<Long> normal = new HashSet<>();
             for (HomologyBlock block : map.blocks()) {
                 for (HomologyCandidate a : block.anchors()) normal.add(anchorKey(a.positionA(), a.positionB()));
@@ -322,7 +323,7 @@ final class BreedingEngine {
 
     private TrackedSequence recombine(PairSnapshot pair, int chromosome, ParentMeiosisPolicy meiosisPolicy, GenomeRandom random) {
         List<InheritanceConstraint> constraints = constraintsFor(meiosisPolicy, chromosome);
-        HomologyMap map = homology.analyze(pair.a().bits(), pair.b().bits());
+        HomologyMap map = pair.homologyMemo().analyze(homology);
         if (map.blocks().isEmpty()) return chooseWholeChromatid(pair, chromosome, constraints, random);
 
         double meanLength = (pair.a().bitLength() + pair.b().bitLength()) / 2.0;
@@ -345,7 +346,7 @@ final class BreedingEngine {
                                                    ParentMeiosisPolicy meiosisPolicy,
                                                    GenomeRandom random) {
         List<InheritanceConstraint> constraints = constraintsFor(meiosisPolicy, chromosome);
-        HomologyMap map = homology.analyze(pair.a().bits(), pair.b().bits());
+        HomologyMap map = pair.homologyMemo().analyze(homology);
 
         double meanLength = (pair.a().bitLength() + pair.b().bitLength()) / 2.0;
         int normalCount = RecombinationEventPlan.normalCrossoverTargetCount(
@@ -813,7 +814,8 @@ final class BreedingEngine {
     }
 
     private record PairSnapshot(TrackedSequence a, TrackedSequence b,
-                                LocalRateSnapshot rateA, LocalRateSnapshot rateB) {}
+                                LocalRateSnapshot rateA, LocalRateSnapshot rateB,
+                                HomologyPairMemo homologyMemo) {}
     private record CrossCandidate(int a, int b, double baseWeight) {}
     private record Boundary(int chromosome, int position) {}
     private record SourceInterval(int chromosome, int start, int end) {}
