@@ -13,8 +13,9 @@ public final class HomologyEngine {
         if(a.bitLength()<ANCHOR_BITS||b.bitLength()<ANCHOR_BITS)return new HomologyMap(List.of(),List.of(),List.of());
         ChunkIndex forward=new ChunkIndex(b,false); ChunkIndex reverse=new ChunkIndex(b,true);
         List<HomologyCandidate> candidates=new ArrayList<>();
+        long aw = a.toLong(0, ANCHOR_BITS);
         for(int pa=0;pa<=a.bitLength()-ANCHOR_BITS;pa++){
-            long aw=a.toLong(pa,ANCHOR_BITS);
+            if (pa > 0) aw = roll48(aw, a.bitAt(pa + ANCHOR_BITS - 1));
             addCandidates(candidates,aw,pa,forward,HomologyOrientation.FORWARD);
             addCandidates(candidates,aw,pa,reverse,HomologyOrientation.REVERSE);
         }
