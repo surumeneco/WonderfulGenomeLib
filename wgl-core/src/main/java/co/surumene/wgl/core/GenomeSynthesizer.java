@@ -34,6 +34,7 @@ final class GenomeSynthesizer {
         boolean sawSafeCandidate = false;
 
         for (int attempt = 0; attempt < context.genomeRetries(); attempt++) {
+            GenomeDecoderEngine.HomologyCache cache = new GenomeDecoderEngine.HomologyCache();
             List<MutableScaffold> a = new ArrayList<>();
             List<MutableScaffold> b = new ArrayList<>();
             for (int chromosome = 0; chromosome < backbone.chromosomes().size(); chromosome++) {
