@@ -135,7 +135,8 @@ final class BreedingEngine {
             TrackedSequence b = TrackedSequence.snapshot(pair.haplotypeB(), chromosome * 2 + 1, rateB);
             sourceChromatids.add(a);
             sourceChromatids.add(b);
-            pairs.add(new PairSnapshot(a, b, rateA, rateB));
+            pairs.add(new PairSnapshot(a, b, rateA, rateB,
+                    new HomologyPairMemo(a.bits(), b.bits())));
         }
         ProvenanceGuard guard = ProvenanceGuard.capture(profile, parser,
                 context.deNovoForbiddenAddresses(), sourceChromatids);
