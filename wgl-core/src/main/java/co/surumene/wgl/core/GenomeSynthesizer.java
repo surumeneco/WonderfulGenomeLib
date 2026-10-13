@@ -89,20 +89,20 @@ final class GenomeSynthesizer {
             sawSafeCandidate = true;
             if (target.isSatisfied(decoded.decodedGenome(), config.synthesizer().convergenceTolerance())) {
                 return successWithMicroCorrections(
-                        profile, backbone, target, synthesisPlans, a, b, decoded, random);
+                        profile, backbone, target, synthesisPlans, a, b, decoded, random, cache);
             }
 
             SynthesisResult.Success adjusted = locallyAdjust(
-                    profile, backbone, target, synthesisPlans, a, b, decoded, random);
+                    profile, backbone, target, synthesisPlans, a, b, decoded, random, cache);
             if (adjusted != null) return adjusted;
 
             SynthesisResult.Success regenerated = regenerateProblematicAddress(
-                    profile, backbone, target, context, synthesisPlans, a, b, random);
+                    profile, backbone, target, context, synthesisPlans, a, b, random, cache);
             if (regenerated != null) return regenerated;
 
             if (profileBlockCount > 0) {
                 SynthesisResult.Success profileBlocksRegenerated = regenerateProfileBlocks(
-                        profile, backbone, target, context, synthesisPlans, a, b, random);
+                        profile, backbone, target, context, synthesisPlans, a, b, random, cache);
                 if (profileBlocksRegenerated != null) return profileBlocksRegenerated;
             }
         }
@@ -121,7 +121,7 @@ final class GenomeSynthesizer {
                                                         List<MutableScaffold> a,
                                                         List<MutableScaffold> b,
                                                         DecodeResult<?> initial,
-                                                        GenomeRandom random) {
+                                                        GenomeRandom random, GenomeDecoderEngine.HomologyCache cache) {
         DecodeResult<?> decoded = initial;
         double tolerance = config.synthesizer().convergenceTolerance();
         double maxRatio = config.synthesizer().localAdjustmentMaxContributionRatio();
@@ -129,7 +129,7 @@ final class GenomeSynthesizer {
         for (int iteration = 0; iteration < config.synthesizer().localAdjustmentMaxIterations(); iteration++) {
             if (target.isSatisfied(decoded.decodedGenome(), tolerance)) {
                 return successWithMicroCorrections(
-                        profile, backbone, target, synthesisPlans, a, b, decoded, random);
+                        profile, backbone, target, synthesisPlans, a, b, decoded, random, cache);
             }
 
             Residual residual = largestResidual(synthesisPlans, decoded.decodedGenome(), tolerance);
@@ -191,7 +191,7 @@ final class GenomeSynthesizer {
         DecodeResult<?> finalDecoded = decoder.decode(profile, genome);
         return target.isSatisfied(finalDecoded.decodedGenome(), tolerance)
                 ? successWithMicroCorrections(
-                        profile, backbone, target, synthesisPlans, a, b, finalDecoded, random)
+                        profile, backbone, target, synthesisPlans, a, b, finalDecoded, random, cache)
                 : null;
     }
 
@@ -203,7 +203,7 @@ final class GenomeSynthesizer {
             Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans,
             List<MutableScaffold> a,
             List<MutableScaffold> b,
-            GenomeRandom random) {
+            GenomeRandom random, GenomeDecoderEngine.HomologyCache cache) {
         double tolerance = config.synthesizer().convergenceTolerance();
         DiploidGenome currentGenome = currentGenome(backbone, a, b);
         if (!safeDiploid(backbone, currentGenome)) return null;
@@ -238,10 +238,10 @@ final class GenomeSynthesizer {
 
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
             return successWithMicroCorrections(
-                    profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random);
+                    profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random, cache);
         }
         return locallyAdjust(
-                profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random);
+                profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random, cache);
     }
 
     private SynthesisResult.Success regenerateProfileBlocks(
@@ -252,7 +252,7 @@ final class GenomeSynthesizer {
             Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans,
             List<MutableScaffold> a,
             List<MutableScaffold> b,
-            GenomeRandom random) {
+            GenomeRandom random, GenomeDecoderEngine.HomologyCache cache) {
         List<MutableScaffold> trialA = copyScaffolds(a);
         List<MutableScaffold> trialB = copyScaffolds(b);
         for (MutableScaffold scaffold : trialA) scaffold.removeGeneratedBlocks(null);
@@ -269,17 +269,17 @@ final class GenomeSynthesizer {
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
             return successWithMicroCorrections(
                     profile, backbone, target, synthesisPlans,
-                    trialA, trialB, regeneratedDecoded, random);
+                    trialA, trialB, regeneratedDecoded, random, cache);
         }
 
         SynthesisResult.Success adjusted = locallyAdjust(
                 profile, backbone, target, synthesisPlans,
-                trialA, trialB, regeneratedDecoded, random);
+                trialA, trialB, regeneratedDecoded, random, cache);
         if (adjusted != null) return adjusted;
 
         return regenerateProblematicAddress(
                 profile, backbone, target, context, synthesisPlans,
-                trialA, trialB, random);
+                trialA, trialB, random, cache);
     }
 
     private SynthesisResult.Success successWithMicroCorrections(
@@ -290,7 +290,7 @@ final class GenomeSynthesizer {
             List<MutableScaffold> a,
             List<MutableScaffold> b,
             DecodeResult<?> initial,
-            GenomeRandom random) {
+            GenomeRandom random, GenomeDecoderEngine.HomologyCache cache) {
         double tolerance = config.synthesizer().convergenceTolerance();
         DecodeResult<?> decoded = initial;
 
