@@ -197,7 +197,7 @@ final class BreedingEngine {
         // Alternative homolog mappings: normal-chain anchors are excluded; ambiguous alternatives remain.
         for (int chromosome = 0; chromosome < pairs.size(); chromosome++) {
             PairSnapshot pair = pairs.get(chromosome);
-            HomologyMap map = homology.analyze(pair.a().bits(), pair.b().bits());
+            HomologyMap map = pair.homologyMemo().analyze(homology);
             Set<Long> normal = new HashSet<>();
             for (HomologyBlock block : map.blocks()) {
                 for (HomologyCandidate a : block.anchors()) normal.add(anchorKey(a.positionA(), a.positionB()));
@@ -323,7 +323,7 @@ final class BreedingEngine {
 
     private TrackedSequence recombine(PairSnapshot pair, int chromosome, ParentMeiosisPolicy meiosisPolicy, GenomeRandom random) {
         List<InheritanceConstraint> constraints = constraintsFor(meiosisPolicy, chromosome);
-        HomologyMap map = homology.analyze(pair.a().bits(), pair.b().bits());
+        HomologyMap map = pair.homologyMemo().analyze(homology);
         if (map.blocks().isEmpty()) return chooseWholeChromatid(pair, chromosome, constraints, random);
 
         double meanLength = (pair.a().bitLength() + pair.b().bitLength()) / 2.0;
@@ -346,7 +346,7 @@ final class BreedingEngine {
                                                    ParentMeiosisPolicy meiosisPolicy,
                                                    GenomeRandom random) {
         List<InheritanceConstraint> constraints = constraintsFor(meiosisPolicy, chromosome);
-        HomologyMap map = homology.analyze(pair.a().bits(), pair.b().bits());
+        HomologyMap map = pair.homologyMemo().analyze(homology);
 
         double meanLength = (pair.a().bitLength() + pair.b().bitLength()) / 2.0;
         int normalCount = RecombinationEventPlan.normalCrossoverTargetCount(
