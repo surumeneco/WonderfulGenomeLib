@@ -16,10 +16,17 @@ final class TrackedSequence {
     private final Origin[] origins;
 
     TrackedSequence(BitSequence bits, Origin[] origins) {
+        this(bits, origins, true);
+    }
+
+    private TrackedSequence(BitSequence bits, Origin[] origins, boolean defensiveCopy) {
         this.bits = Objects.requireNonNull(bits, "bits");
         Objects.requireNonNull(origins, "origins");
         if (origins.length != bits.bitLength()) throw new IllegalArgumentException("origin count must match bit length");
-        this.origins = origins.clone();
+        // Internal operations have just allocated this array (or share another
+        // immutable TrackedSequence's private array); a second clone is redundant.
+        // The package-level constructor still protects caller-owned arrays.
+        this.origins = defensiveCopy ? origins.clone() : origins;
     }
 
     static TrackedSequence snapshot(BitSequence bits, int lane, LocalRateSnapshot rates) {
@@ -29,13 +36,13 @@ final class TrackedSequence {
                     rates.multiplier(LocalRateSnapshot.Kind.POINT, i),
                     rates.multiplier(LocalRateSnapshot.Kind.STRUCTURAL, i));
         }
-        return new TrackedSequence(bits, origins);
+        return new TrackedSequence(bits, origins, false);
     }
 
     static TrackedSequence fresh(BitSequence bits) {
         Origin[] origins = new Origin[bits.bitLength()];
         Arrays.fill(origins, Origin.fresh());
-        return new TrackedSequence(bits, origins);
+        return new TrackedSequence(bits, origins, false);
     }
 
     BitSequence bits() { return bits; }
@@ -44,7 +51,7 @@ final class TrackedSequence {
     Origin[] origins() { return origins.clone(); }
 
     TrackedSequence flip(int index) {
-        return new TrackedSequence(bits.flip(index), origins);
+        return new TrackedSequence(bits.flip(index), origins, false);
     }
 
     TrackedSequence slice(int fromInclusive, int toExclusive) {
@@ -52,14 +59,14 @@ final class TrackedSequence {
             throw new IndexOutOfBoundsException("invalid tracked slice");
         }
         return new TrackedSequence(bits.slice(fromInclusive, toExclusive),
-                Arrays.copyOfRange(origins, fromInclusive, toExclusive));
+                Arrays.copyOfRange(origins, fromInclusive, toExclusive), false);
     }
 
     TrackedSequence concat(TrackedSequence other) {
         Objects.requireNonNull(other, "other");
         Origin[] next = Arrays.copyOf(origins, origins.length + other.origins.length);
         System.arraycopy(other.origins, 0, next, origins.length, other.origins.length);
-        return new TrackedSequence(bits.concat(other.bits), next);
+        return new TrackedSequence(bits.concat(other.bits), next, false);
     }
 
     TrackedSequence insert(int position, TrackedSequence inserted) {
@@ -79,7 +86,7 @@ final class TrackedSequence {
         if (bitLength() <= 1) return this;
         Origin[] reversed = new Origin[origins.length];
         for (int i = 0; i < origins.length; i++) reversed[i] = origins[origins.length - 1 - i];
-        return new TrackedSequence(bits.reverse(), reversed);
+        return new TrackedSequence(bits.reverse(), reversed, false);
     }
 
     double structuralBoundaryWeight(int boundary) {
