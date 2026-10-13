@@ -34,6 +34,7 @@ final class GenomeSynthesizer {
         boolean sawSafeCandidate = false;
 
         for (int attempt = 0; attempt < context.genomeRetries(); attempt++) {
+            GenomeDecoderEngine.HomologyCache cache = new GenomeDecoderEngine.HomologyCache();
             List<MutableScaffold> a = new ArrayList<>();
             List<MutableScaffold> b = new ArrayList<>();
             for (int chromosome = 0; chromosome < backbone.chromosomes().size(); chromosome++) {
@@ -80,7 +81,7 @@ final class GenomeSynthesizer {
                 sawSafetyRejection = true;
                 continue;
             }
-            DecodeResult<?> decoded = decoder.decode(profile, genome);
+            DecodeResult<?> decoded = decoder.decode(profile, genome, cache);
             if (!synthesisSafe(profile, genome, decoded.decodedGenome())) {
                 sawSafetyRejection = true;
                 continue;
@@ -88,20 +89,20 @@ final class GenomeSynthesizer {
             sawSafeCandidate = true;
             if (target.isSatisfied(decoded.decodedGenome(), config.synthesizer().convergenceTolerance())) {
                 return successWithMicroCorrections(
-                        profile, backbone, target, synthesisPlans, a, b, decoded, random);
+                        profile, backbone, target, synthesisPlans, a, b, decoded, random, cache);
             }
 
             SynthesisResult.Success adjusted = locallyAdjust(
-                    profile, backbone, target, synthesisPlans, a, b, decoded, random);
+                    profile, backbone, target, synthesisPlans, a, b, decoded, random, cache);
             if (adjusted != null) return adjusted;
 
             SynthesisResult.Success regenerated = regenerateProblematicAddress(
-                    profile, backbone, target, context, synthesisPlans, a, b, random);
+                    profile, backbone, target, context, synthesisPlans, a, b, random, cache);
             if (regenerated != null) return regenerated;
 
             if (profileBlockCount > 0) {
                 SynthesisResult.Success profileBlocksRegenerated = regenerateProfileBlocks(
-                        profile, backbone, target, context, synthesisPlans, a, b, random);
+                        profile, backbone, target, context, synthesisPlans, a, b, random, cache);
                 if (profileBlocksRegenerated != null) return profileBlocksRegenerated;
             }
         }
@@ -120,7 +121,7 @@ final class GenomeSynthesizer {
                                                         List<MutableScaffold> a,
                                                         List<MutableScaffold> b,
                                                         DecodeResult<?> initial,
-                                                        GenomeRandom random) {
+                                                        GenomeRandom random, GenomeDecoderEngine.HomologyCache cache) {
         DecodeResult<?> decoded = initial;
         double tolerance = config.synthesizer().convergenceTolerance();
         double maxRatio = config.synthesizer().localAdjustmentMaxContributionRatio();
@@ -128,7 +129,7 @@ final class GenomeSynthesizer {
         for (int iteration = 0; iteration < config.synthesizer().localAdjustmentMaxIterations(); iteration++) {
             if (target.isSatisfied(decoded.decodedGenome(), tolerance)) {
                 return successWithMicroCorrections(
-                        profile, backbone, target, synthesisPlans, a, b, decoded, random);
+                        profile, backbone, target, synthesisPlans, a, b, decoded, random, cache);
             }
 
             Residual residual = largestResidual(synthesisPlans, decoded.decodedGenome(), tolerance);
@@ -174,7 +175,7 @@ final class GenomeSynthesizer {
             DiploidGenome genome = currentGenome(backbone, trialA, trialB);
             if (!safeDiploid(backbone, genome)) continue;
 
-            DecodeResult<?> next = decoder.decode(profile, genome);
+            DecodeResult<?> next = decoder.decode(profile, genome, cache);
             if (!synthesisSafe(profile, genome, next.decodedGenome())) continue;
             double nextError = totalError(synthesisPlans, next.decodedGenome());
             double currentError = totalError(synthesisPlans, decoded.decodedGenome());
@@ -187,10 +188,10 @@ final class GenomeSynthesizer {
 
         DiploidGenome genome = currentGenome(backbone, a, b);
         if (!safeDiploid(backbone, genome)) return null;
-        DecodeResult<?> finalDecoded = decoder.decode(profile, genome);
+        DecodeResult<?> finalDecoded = decoder.decode(profile, genome, cache);
         return target.isSatisfied(finalDecoded.decodedGenome(), tolerance)
                 ? successWithMicroCorrections(
-                        profile, backbone, target, synthesisPlans, a, b, finalDecoded, random)
+                        profile, backbone, target, synthesisPlans, a, b, finalDecoded, random, cache)
                 : null;
     }
 
@@ -202,12 +203,12 @@ final class GenomeSynthesizer {
             Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans,
             List<MutableScaffold> a,
             List<MutableScaffold> b,
-            GenomeRandom random) {
+            GenomeRandom random, GenomeDecoderEngine.HomologyCache cache) {
         double tolerance = config.synthesizer().convergenceTolerance();
         DiploidGenome currentGenome = currentGenome(backbone, a, b);
         if (!safeDiploid(backbone, currentGenome)) return null;
 
-        DecodeResult<?> currentDecoded = decoder.decode(profile, currentGenome);
+        DecodeResult<?> currentDecoded = decoder.decode(profile, currentGenome, cache);
         Residual residual = largestResidual(synthesisPlans, currentDecoded.decodedGenome(), tolerance);
         if (residual == null) return null;
 
@@ -232,15 +233,15 @@ final class GenomeSynthesizer {
 
         DiploidGenome regeneratedGenome = currentGenome(backbone, trialA, trialB);
         if (!safeDiploid(backbone, regeneratedGenome)) return null;
-        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
+        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome, cache);
         if (!synthesisSafe(profile, regeneratedGenome, regeneratedDecoded.decodedGenome())) return null;
 
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
             return successWithMicroCorrections(
-                    profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random);
+                    profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random, cache);
         }
         return locallyAdjust(
-                profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random);
+                profile, backbone, target, trialPlans, trialA, trialB, regeneratedDecoded, random, cache);
     }
 
     private SynthesisResult.Success regenerateProfileBlocks(
@@ -251,7 +252,7 @@ final class GenomeSynthesizer {
             Map<GenomeAddress, SynthesisAddressPlan> synthesisPlans,
             List<MutableScaffold> a,
             List<MutableScaffold> b,
-            GenomeRandom random) {
+            GenomeRandom random, GenomeDecoderEngine.HomologyCache cache) {
         List<MutableScaffold> trialA = copyScaffolds(a);
         List<MutableScaffold> trialB = copyScaffolds(b);
         for (MutableScaffold scaffold : trialA) scaffold.removeGeneratedBlocks(null);
@@ -263,22 +264,22 @@ final class GenomeSynthesizer {
         if (!safeDiploid(backbone, regeneratedGenome)) return null;
 
         double tolerance = config.synthesizer().convergenceTolerance();
-        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
+        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome, cache);
         if (!synthesisSafe(profile, regeneratedGenome, regeneratedDecoded.decodedGenome())) return null;
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
             return successWithMicroCorrections(
                     profile, backbone, target, synthesisPlans,
-                    trialA, trialB, regeneratedDecoded, random);
+                    trialA, trialB, regeneratedDecoded, random, cache);
         }
 
         SynthesisResult.Success adjusted = locallyAdjust(
                 profile, backbone, target, synthesisPlans,
-                trialA, trialB, regeneratedDecoded, random);
+                trialA, trialB, regeneratedDecoded, random, cache);
         if (adjusted != null) return adjusted;
 
         return regenerateProblematicAddress(
                 profile, backbone, target, context, synthesisPlans,
-                trialA, trialB, random);
+                trialA, trialB, random, cache);
     }
 
     private SynthesisResult.Success successWithMicroCorrections(
@@ -289,7 +290,7 @@ final class GenomeSynthesizer {
             List<MutableScaffold> a,
             List<MutableScaffold> b,
             DecodeResult<?> initial,
-            GenomeRandom random) {
+            GenomeRandom random, GenomeDecoderEngine.HomologyCache cache) {
         double tolerance = config.synthesizer().convergenceTolerance();
         DecodeResult<?> decoded = initial;
 
@@ -332,7 +333,7 @@ final class GenomeSynthesizer {
             DiploidGenome trialGenome = currentGenome(backbone, trialA, trialB);
             if (!safeDiploid(backbone, trialGenome)) continue;
 
-            DecodeResult<?> next = decoder.decode(profile, trialGenome);
+            DecodeResult<?> next = decoder.decode(profile, trialGenome, cache);
             if (!synthesisSafe(profile, trialGenome, next.decodedGenome())) continue;
             if (feedsRelay(next.decodedGenome(), chromosome, haplotype, geneStart)) continue;
             if (!target.isSatisfied(next.decodedGenome(), tolerance)) continue;
