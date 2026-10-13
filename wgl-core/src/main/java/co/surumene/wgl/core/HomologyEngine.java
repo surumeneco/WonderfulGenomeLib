@@ -225,8 +225,10 @@ public final class HomologyEngine {
         final int[] visited;
         ChunkIndex(BitSequence b,boolean reversed){
             int n=b.bitLength()-ANCHOR_BITS+1;windows=new long[n];visited=new int[n];
+            long raw = b.toLong(0, ANCHOR_BITS);
             for(int p=0;p<n;p++){
-                long raw=b.toLong(p,ANCHOR_BITS); long w=reversed?reverse48(raw):raw;windows[p]=w;
+                if (p > 0) raw = roll48(raw, b.bitAt(p + ANCHOR_BITS - 1));
+                long w=reversed?reverse48(raw):raw;windows[p]=w;
                 positions[0].computeIfAbsent((int)((w>>>32)&0xFFFF),k->new ArrayList<>()).add(p);
                 positions[1].computeIfAbsent((int)((w>>>16)&0xFFFF),k->new ArrayList<>()).add(p);
                 positions[2].computeIfAbsent((int)(w&0xFFFF),k->new ArrayList<>()).add(p);
