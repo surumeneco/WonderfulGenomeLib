@@ -81,7 +81,7 @@ final class GenomeSynthesizer {
                 sawSafetyRejection = true;
                 continue;
             }
-            DecodeResult<?> decoded = decoder.decode(profile, genome);
+            DecodeResult<?> decoded = decoder.decode(profile, genome, cache);
             if (!synthesisSafe(profile, genome, decoded.decodedGenome())) {
                 sawSafetyRejection = true;
                 continue;
@@ -175,7 +175,7 @@ final class GenomeSynthesizer {
             DiploidGenome genome = currentGenome(backbone, trialA, trialB);
             if (!safeDiploid(backbone, genome)) continue;
 
-            DecodeResult<?> next = decoder.decode(profile, genome);
+            DecodeResult<?> next = decoder.decode(profile, genome, cache);
             if (!synthesisSafe(profile, genome, next.decodedGenome())) continue;
             double nextError = totalError(synthesisPlans, next.decodedGenome());
             double currentError = totalError(synthesisPlans, decoded.decodedGenome());
@@ -188,7 +188,7 @@ final class GenomeSynthesizer {
 
         DiploidGenome genome = currentGenome(backbone, a, b);
         if (!safeDiploid(backbone, genome)) return null;
-        DecodeResult<?> finalDecoded = decoder.decode(profile, genome);
+        DecodeResult<?> finalDecoded = decoder.decode(profile, genome, cache);
         return target.isSatisfied(finalDecoded.decodedGenome(), tolerance)
                 ? successWithMicroCorrections(
                         profile, backbone, target, synthesisPlans, a, b, finalDecoded, random, cache)
@@ -208,7 +208,7 @@ final class GenomeSynthesizer {
         DiploidGenome currentGenome = currentGenome(backbone, a, b);
         if (!safeDiploid(backbone, currentGenome)) return null;
 
-        DecodeResult<?> currentDecoded = decoder.decode(profile, currentGenome);
+        DecodeResult<?> currentDecoded = decoder.decode(profile, currentGenome, cache);
         Residual residual = largestResidual(synthesisPlans, currentDecoded.decodedGenome(), tolerance);
         if (residual == null) return null;
 
@@ -233,7 +233,7 @@ final class GenomeSynthesizer {
 
         DiploidGenome regeneratedGenome = currentGenome(backbone, trialA, trialB);
         if (!safeDiploid(backbone, regeneratedGenome)) return null;
-        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
+        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome, cache);
         if (!synthesisSafe(profile, regeneratedGenome, regeneratedDecoded.decodedGenome())) return null;
 
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
@@ -264,7 +264,7 @@ final class GenomeSynthesizer {
         if (!safeDiploid(backbone, regeneratedGenome)) return null;
 
         double tolerance = config.synthesizer().convergenceTolerance();
-        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome);
+        DecodeResult<?> regeneratedDecoded = decoder.decode(profile, regeneratedGenome, cache);
         if (!synthesisSafe(profile, regeneratedGenome, regeneratedDecoded.decodedGenome())) return null;
         if (target.isSatisfied(regeneratedDecoded.decodedGenome(), tolerance)) {
             return successWithMicroCorrections(
@@ -333,7 +333,7 @@ final class GenomeSynthesizer {
             DiploidGenome trialGenome = currentGenome(backbone, trialA, trialB);
             if (!safeDiploid(backbone, trialGenome)) continue;
 
-            DecodeResult<?> next = decoder.decode(profile, trialGenome);
+            DecodeResult<?> next = decoder.decode(profile, trialGenome, cache);
             if (!synthesisSafe(profile, trialGenome, next.decodedGenome())) continue;
             if (feedsRelay(next.decodedGenome(), chromosome, haplotype, geneStart)) continue;
             if (!target.isSatisfied(next.decodedGenome(), tolerance)) continue;
