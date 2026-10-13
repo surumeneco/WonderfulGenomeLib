@@ -29,6 +29,10 @@ public final class HomologyEngine {
         return new HomologyMap(candidates,blocks,ambiguous);
     }
 
+    static long roll48(long previous, boolean newBit) {
+        return ((previous << 1) & 0xFFFFFFFFFFFFL) | (newBit ? 1L : 0L);
+    }
+
     private static void addCandidates(List<HomologyCandidate> out,long aw,int pa,ChunkIndex index,HomologyOrientation orientation){
         // A <=2-bit mismatch in 48 bits must contain at least one identical
         // 16-bit slice. The three index buckets are therefore exhaustive.
