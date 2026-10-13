@@ -31,10 +31,15 @@ public final class HomologyCompatibilityPolicyV1 implements CompatibilityPolicy 
         boolean all = true;
         for (int chromosome = 0; chromosome < a.chromosomeCount(); chromosome++) {
             boolean compatible = false;
+            // Compatibility is a boolean OR over the four haplotype pairs.
+            // After the first true value, subsequent Homology maps cannot
+            // change the public flags/reason. Preserve pair iteration order.
+            pairSearch:
             for (BitSequence left : haplotypes(a, chromosome)) {
                 for (BitSequence right : haplotypes(b, chromosome)) {
                     if (!homology.analyze(left, right).blocks().isEmpty()) {
                         compatible = true;
+                        break pairSearch;
                     }
                 }
             }
