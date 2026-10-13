@@ -814,7 +814,8 @@ final class BreedingEngine {
     }
 
     private record PairSnapshot(TrackedSequence a, TrackedSequence b,
-                                LocalRateSnapshot rateA, LocalRateSnapshot rateB) {}
+                                LocalRateSnapshot rateA, LocalRateSnapshot rateB,
+                                HomologyPairMemo homologyMemo) {}
     private record CrossCandidate(int a, int b, double baseWeight) {}
     private record Boundary(int chromosome, int position) {}
     private record SourceInterval(int chromosome, int start, int end) {}
