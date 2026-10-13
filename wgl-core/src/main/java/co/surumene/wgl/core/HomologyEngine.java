@@ -13,8 +13,9 @@ public final class HomologyEngine {
         if(a.bitLength()<ANCHOR_BITS||b.bitLength()<ANCHOR_BITS)return new HomologyMap(List.of(),List.of(),List.of());
         ChunkIndex forward=new ChunkIndex(b,false); ChunkIndex reverse=new ChunkIndex(b,true);
         List<HomologyCandidate> candidates=new ArrayList<>();
+        long aw = a.toLong(0, ANCHOR_BITS);
         for(int pa=0;pa<=a.bitLength()-ANCHOR_BITS;pa++){
-            long aw=a.toLong(pa,ANCHOR_BITS);
+            if (pa > 0) aw = roll48(aw, a.bitAt(pa + ANCHOR_BITS - 1));
             addCandidates(candidates,aw,pa,forward,HomologyOrientation.FORWARD);
             addCandidates(candidates,aw,pa,reverse,HomologyOrientation.REVERSE);
         }
@@ -26,6 +27,10 @@ public final class HomologyEngine {
         List<HomologyBlock> blocks=buildBlocks(forwardCandidates);
         List<HomologyCandidate> ambiguous=findAmbiguous(candidates);
         return new HomologyMap(candidates,blocks,ambiguous);
+    }
+
+    static long roll48(long previous, boolean newBit) {
+        return ((previous << 1) & 0xFFFFFFFFFFFFL) | (newBit ? 1L : 0L);
     }
 
     private static void addCandidates(List<HomologyCandidate> out,long aw,int pa,ChunkIndex index,HomologyOrientation orientation){
@@ -220,8 +225,10 @@ public final class HomologyEngine {
         final int[] visited;
         ChunkIndex(BitSequence b,boolean reversed){
             int n=b.bitLength()-ANCHOR_BITS+1;windows=new long[n];visited=new int[n];
+            long raw = b.toLong(0, ANCHOR_BITS);
             for(int p=0;p<n;p++){
-                long raw=b.toLong(p,ANCHOR_BITS); long w=reversed?reverse48(raw):raw;windows[p]=w;
+                if (p > 0) raw = roll48(raw, b.bitAt(p + ANCHOR_BITS - 1));
+                long w=reversed?reverse48(raw):raw;windows[p]=w;
                 positions[0].computeIfAbsent((int)((w>>>32)&0xFFFF),k->new ArrayList<>()).add(p);
                 positions[1].computeIfAbsent((int)((w>>>16)&0xFFFF),k->new ArrayList<>()).add(p);
                 positions[2].computeIfAbsent((int)(w&0xFFFF),k->new ArrayList<>()).add(p);
