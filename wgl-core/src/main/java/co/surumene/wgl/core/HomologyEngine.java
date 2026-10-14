@@ -80,6 +80,7 @@ public final class HomologyEngine {
         }
         int n = cands.size();
         double[] score = new double[n];
+        double[] prefixMaximum = new double[n];
         int[] count = new int[n];
         long[] gapError = new long[n];
         int[] prev = new int[n];
@@ -91,11 +92,16 @@ public final class HomologyEngine {
         Map<Integer, Double> gapWeights = new HashMap<>();
         for (int i = 0; i < n; i++) {
             HomologyCandidate cur = cands.get(i);
-            score[i] = cur.anchorQuality();
+            double quality = cur.anchorQuality();
+            score[i] = quality;
             count[i] = 1;
             startA[i] = cur.positionA();
             startB[i] = cur.positionB();
             for (int j = i - 1; j >= 0; j--) {
+                // Every preceding score is <= this prefix maximum. When
+                // even qGap=1 cannot beat the incumbent, earlier candidates
+                // cannot win. Keep equality for the original tie breakers.
+                if (prefixMaximum[j] + quality < score[i]) break;
                 HomologyCandidate prior = cands.get(j);
                 int da = cur.positionA() - prior.positionA();
                 if (da > config.homology().maxAnchorGapBits()) break;
@@ -105,10 +111,10 @@ public final class HomologyEngine {
                 // possible transition from this predecessor cannot win if
                 // its upper-bound score is already below the incumbent.
                 // Equality must still be evaluated for original tie breaks.
-                if (score[j] + cur.anchorQuality() < score[i]) continue;
+                if (score[j] + quality < score[i]) continue;
                 double qGap = gapWeights.computeIfAbsent(Math.abs(da - db),
                         displacement -> StrictMath.exp(-displacement / 256.0));
-                double candidateScore = score[j] + cur.anchorQuality() * qGap;
+                double candidateScore = score[j] + quality * qGap;
                 int candidateCount = count[j] + 1;
                 long candidateError = gapError[j] + StrictMath.abs(da - db);
                 if (better(candidateScore, candidateCount, candidateError, startA[j],
@@ -121,6 +127,7 @@ public final class HomologyEngine {
                     startB[i] = startB[j];
                 }
             }
+            prefixMaximum[i] = i == 0 ? score[i] : Math.max(prefixMaximum[i - 1], score[i]);
         }
 
         int best = -1;
