@@ -211,4 +211,28 @@ final class HomologyChainDifferentialTest {
         if (e1 != e2) return e1 < e2;
         return start1 < start2;
     }
+
+    @Test
+    void denseRepeatsAndEqualScoreTiesPreserveExactQuadraticChain() throws Exception {
+        HomologyEngine engine = new HomologyEngine(EngineConfig.defaults());
+        ArrayList<HomologyCandidate> candidates = new ArrayList<>();
+        for (int a = 0; a < 95; a++) {
+            for (int b = 0; b < 14; b++) {
+                candidates.add(new HomologyCandidate(
+                        a * 11, ((a * 7 + b * 37) % 101) * 11,
+                        HomologyOrientation.FORWARD, (a + b) % 3));
+            }
+        }
+        candidates.sort(ORDER);
+        assertEquals(referenceChain(candidates, 1024), invokeChain(engine, candidates),
+                "dense multi-diagonal cases must preserve original tie ordering");
+        ArrayList<HomologyCandidate> tied = new ArrayList<>();
+        for (int a = 0; a < 420; a++) {
+            tied.add(new HomologyCandidate(a * 3, a * 3 + 11, HomologyOrientation.FORWARD, 0));
+            if (a % 17 == 0) tied.add(new HomologyCandidate(a * 3, a * 3 + 12,
+                    HomologyOrientation.FORWARD, 0));
+        }
+        tied.sort(ORDER);
+        assertEquals(referenceChain(tied, 1024), invokeChain(engine, tied));
+    }
 }
