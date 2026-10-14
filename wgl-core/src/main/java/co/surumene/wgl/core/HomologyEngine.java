@@ -205,17 +205,35 @@ public final class HomologyEngine {
     }
 
     private static List<HomologyCandidate> findAmbiguous(List<HomologyCandidate> candidates) {
-        Map<String, Set<Integer>> byA = new HashMap<>();
-        Map<String, Set<Integer>> byB = new HashMap<>();
+        // Only distinct counterpart positions matter, not their frequency.
+        // Numeric keys avoid allocating orientation Strings and HashSets for
+        // every anchor coordinate. -1 indicates two distinct counterparts.
+        Map<Long, Integer> byA = new HashMap<>();
+        Map<Long, Integer> byB = new HashMap<>();
         for (HomologyCandidate c : candidates) {
-            String aKey = c.positionA() + ":" + c.orientation();
-            String bKey = c.positionB() + ":" + c.orientation();
-            byA.computeIfAbsent(aKey, k -> new HashSet<>()).add(c.positionB());
-            byB.computeIfAbsent(bKey, k -> new HashSet<>()).add(c.positionA());
+            long aKey = ambiguityKey(c.positionA(), c.orientation());
+            long bKey = ambiguityKey(c.positionB(), c.orientation());
+            markDistinct(byA, aKey, c.positionB());
+            markDistinct(byB, bKey, c.positionA());
         }
-        return candidates.stream().filter(c ->
-                byA.get(c.positionA() + ":" + c.orientation()).size() > 1
-                        || byB.get(c.positionB() + ":" + c.orientation()).size() > 1).toList();
+        List<HomologyCandidate> ambiguous = new ArrayList<>();
+        for (HomologyCandidate c : candidates) {
+            long aKey = ambiguityKey(c.positionA(), c.orientation());
+            long bKey = ambiguityKey(c.positionB(), c.orientation());
+            if (byA.get(aKey) == -1 || byB.get(bKey) == -1) {
+                ambiguous.add(c);
+            }
+        }
+        return List.copyOf(ambiguous);
+    }
+
+    private static long ambiguityKey(int position, HomologyOrientation orientation) {
+        return ((long) position << 1) | (orientation == HomologyOrientation.FORWARD ? 0 : 1);
+    }
+
+    private static void markDistinct(Map<Long, Integer> values, long key, int other) {
+        Integer first = values.putIfAbsent(key, other);
+        if (first != null && first != -1 && first != other) values.put(key, -1);
     }
 
     @SuppressWarnings("unchecked")
