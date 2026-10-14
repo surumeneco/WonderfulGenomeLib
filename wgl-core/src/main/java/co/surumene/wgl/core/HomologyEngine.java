@@ -88,7 +88,7 @@ public final class HomologyEngine {
         Arrays.fill(prev, -1);
         // The exponential depends only on the integer displacement difference;
         // reuse identical values without changing strict floating-point semantics.
-        Map<Integer, Double> gapWeights = new HashMap<>();
+        double[] gapWeights = new double[Math.min(config.homology().maxAnchorGapBits(), 4096) + 1];
         for (int i = 0; i < n; i++) {
             HomologyCandidate cur = cands.get(i);
             score[i] = cur.anchorQuality();
@@ -106,8 +106,12 @@ public final class HomologyEngine {
                 // its upper-bound score is already below the incumbent.
                 // Equality must still be evaluated for original tie breaks.
                 if (score[j] + cur.anchorQuality() < score[i]) continue;
-                double qGap = gapWeights.computeIfAbsent(Math.abs(da - db),
-                        displacement -> StrictMath.exp(-displacement / 256.0));
+                int delta = Math.abs(da - db);
+                double qGap = delta < gapWeights.length ? gapWeights[delta] : 0.0;
+                if (qGap == 0.0) {
+                    qGap = StrictMath.exp(-delta / 256.0);
+                    if (delta < gapWeights.length) gapWeights[delta] = qGap;
+                }
                 double candidateScore = score[j] + cur.anchorQuality() * qGap;
                 int candidateCount = count[j] + 1;
                 long candidateError = gapError[j] + StrictMath.abs(da - db);
