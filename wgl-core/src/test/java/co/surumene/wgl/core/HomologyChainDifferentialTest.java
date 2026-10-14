@@ -211,4 +211,35 @@ final class HomologyChainDifferentialTest {
         if (e1 != e2) return e1 < e2;
         return start1 < start2;
     }
+
+    @Test
+    void reportsAllocationForRepeatedGapWeightsAgainstExactQuadraticOracle() throws Exception {
+        ArrayList<HomologyCandidate> candidates = new ArrayList<>();
+        for (int i = 0; i < 480; i++) {
+            int positionA = i * 3;
+            int positionB = i * 3 + (i * 101 % 997);
+            candidates.add(new HomologyCandidate(positionA, positionB,
+                    HomologyOrientation.FORWARD, i % 3));
+        }
+        candidates.sort(ORDER);
+        HomologyEngine engine = new HomologyEngine(EngineConfig.defaults());
+        List<HomologyCandidate> expected = referenceChain(candidates, 1024);
+        assertEquals(expected, invokeChain(engine, candidates),
+                "mixed-diagonal gap-weight result must match the independent DP oracle");
+        com.sun.management.ThreadMXBean mx =
+                (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+        if (!mx.isThreadAllocatedMemorySupported()) return;
+        for (int i = 0; i < 8; i++) invokeChain(engine, candidates);
+        long thread = Thread.currentThread().threadId();
+        long before = mx.getThreadAllocatedBytes(thread);
+        long start = System.nanoTime();
+        for (int i = 0; i < 20; i++) {
+            assertEquals(expected, invokeChain(engine, candidates));
+        }
+        long duration = System.nanoTime() - start;
+        long allocated = mx.getThreadAllocatedBytes(thread) - before;
+        System.out.printf(java.util.Locale.ROOT,
+                "HOMOLOGY_GAP_BENCH n=%d trials=20 allocated_bytes_per_call=%.1f mean_ms=%.4f%n",
+                candidates.size(), allocated / 20.0, duration / 1e6 / 20.0);
+    }
 }
