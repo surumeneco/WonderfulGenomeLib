@@ -39,7 +39,7 @@ final class HomologyPrimitiveIndexParityTest {
     private static BitSequence randomBits(int n, Random random, boolean repeated) {
         StringBuilder builder = new StringBuilder(n);
         for (int i = 0; i < n; i++) {
-            builder.append(repeated ? ((i / 9) & 1) : random.nextBoolean() ? '1' : '0');
+            builder.append(repeated ? (((i / 9) & 1) == 0 ? '0' : '1') : (random.nextBoolean() ? '1' : '0'));
         }
         return BitSequence.fromBits(builder.toString());
     }
