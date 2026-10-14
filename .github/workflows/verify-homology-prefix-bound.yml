@@ -35,6 +35,4 @@ jobs:
           gradle-version: '9.1.0'
       - name: Consumer golden and allocation check
         working-directory: Consumer
-        env:
-          GITHUB_REF_NAME: feature/genome-stats-${{ matrix.shard }}
-        run: gradle clean test --tests '*GenomeStatisticsProbeTest' --info --no-daemon
+        run: GITHUB_REF_NAME=feature/genome-stats-${{ matrix.shard }} gradle clean test --tests '*GenomeStatisticsProbeTest' --info --no-daemon
