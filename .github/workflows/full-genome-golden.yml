@@ -1,0 +1,38 @@
+name: full-genome-golden
+on:
+  push:
+    branches: [feature/homology-prefix-golden-20261014]
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        species: [WWC, WWW]
+        shard: ['00', '01']
+        revision: [baseline, optimized]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: GoldenTools
+      - uses: actions/checkout@v5
+        with:
+          repository: surumeneco/WonderfulGenomeLib
+          ref: ${{ matrix.revision == 'baseline' && '2ed95277196249172bdae4cac14e6e52df78f40d' || 'd07636907ca7e0ff22cc63a075ea1d18455cf103' }}
+          path: WonderfulGenomeLib
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ matrix.species == 'WWC' && 'surumeneco/WhatAWonderfulChicken' || 'surumeneco/WhatAWonderfulWolf' }}
+          ref: feature/wgl-reprofile-${{ matrix.shard }}
+          path: Consumer
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.1.0'
+      - run: python3 GoldenTools/.github/scripts/augment_genome_golden.py
+      - name: Run full binary Golden
+        working-directory: Consumer
+        run: GITHUB_REF_NAME=feature/genome-stats-${{ matrix.shard }} gradle clean test --tests '*GenomeStatisticsProbeTest' --info --no-daemon
