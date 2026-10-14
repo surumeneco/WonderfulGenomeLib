@@ -48,18 +48,19 @@ final class HomologyAmbiguityParityTest {
     private static List<HomologyCandidate> exhaustive(List<HomologyCandidate> candidates) {
         List<HomologyCandidate> out = new ArrayList<>();
         for (HomologyCandidate current : candidates) {
+            int firstB = -1;
+            int firstA = -1;
             boolean ambiguousA = false;
             boolean ambiguousB = false;
-            for (HomologyCandidate one : candidates) {
-                if (one.orientation() != current.orientation()) continue;
-                for (HomologyCandidate two : candidates) {
-                    if (two.orientation() != current.orientation()) continue;
-                    if (one.positionA() == current.positionA()
-                            && two.positionA() == current.positionA()
-                            && one.positionB() != two.positionB()) ambiguousA = true;
-                    if (one.positionB() == current.positionB()
-                            && two.positionB() == current.positionB()
-                            && one.positionA() != two.positionA()) ambiguousB = true;
+            for (HomologyCandidate other : candidates) {
+                if (other.orientation() != current.orientation()) continue;
+                if (other.positionA() == current.positionA()) {
+                    if (firstB < 0) firstB = other.positionB();
+                    else if (other.positionB() != firstB) ambiguousA = true;
+                }
+                if (other.positionB() == current.positionB()) {
+                    if (firstA < 0) firstA = other.positionA();
+                    else if (other.positionA() != firstA) ambiguousB = true;
                 }
             }
             if (ambiguousA || ambiguousB) out.add(current);
