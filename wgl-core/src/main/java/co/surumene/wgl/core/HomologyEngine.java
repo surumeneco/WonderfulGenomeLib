@@ -41,9 +41,10 @@ public final class HomologyEngine {
         for (int chunk=0;chunk<3;chunk++) {
             int shift=32-16*chunk;
             int key=(int)((aw>>>shift)&0xFFFFL);
-            List<Integer> ps=index.positions[chunk].get(key);
+            IntPositions ps=index.positions[chunk].get(key);
             if (ps == null) continue;
-            for (int pb : ps) {
+            for (int i = 0; i < ps.size; i++) {
+                int pb = ps.values[i];
                 if (index.visited[pb] == generation) continue;
                 index.visited[pb] = generation;
                 int h=Long.bitCount((aw^index.window(pb))&0xFFFFFFFFFFFFL);
@@ -218,9 +219,20 @@ public final class HomologyEngine {
                         || byB.get(c.positionB() + ":" + c.orientation()).size() > 1).toList();
     }
 
+    /** Sparse postings backed by primitive positions: no Integer per 48-bit window. */
+    private static final class IntPositions {
+        int[] values = new int[4];
+        int size;
+
+        void add(int position) {
+            if (size == values.length) values = Arrays.copyOf(values, size * 2);
+            values[size++] = position;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static final class ChunkIndex {
-        final Map<Integer,List<Integer>>[] positions=new Map[]{new HashMap<>(),new HashMap<>(),new HashMap<>()};
+        final Map<Integer,IntPositions>[] positions=new Map[]{new HashMap<>(),new HashMap<>(),new HashMap<>()};
         final long[] windows;
         final int[] visited;
         ChunkIndex(BitSequence b,boolean reversed){
@@ -229,9 +241,9 @@ public final class HomologyEngine {
             for(int p=0;p<n;p++){
                 if (p > 0) raw = roll48(raw, b.bitAt(p + ANCHOR_BITS - 1));
                 long w=reversed?reverse48(raw):raw;windows[p]=w;
-                positions[0].computeIfAbsent((int)((w>>>32)&0xFFFF),k->new ArrayList<>()).add(p);
-                positions[1].computeIfAbsent((int)((w>>>16)&0xFFFF),k->new ArrayList<>()).add(p);
-                positions[2].computeIfAbsent((int)(w&0xFFFF),k->new ArrayList<>()).add(p);
+                positions[0].computeIfAbsent((int)((w>>>32)&0xFFFF),k->new IntPositions()).add(p);
+                positions[1].computeIfAbsent((int)((w>>>16)&0xFFFF),k->new IntPositions()).add(p);
+                positions[2].computeIfAbsent((int)(w&0xFFFF),k->new IntPositions()).add(p);
             }
         }
         long window(int p){return windows[p];}
