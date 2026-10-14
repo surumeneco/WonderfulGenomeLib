@@ -1,0 +1,40 @@
+name: verify-homology-prefix-bound
+on:
+  push:
+    branches: [feature/homology-dp-prefix-bound-20261014]
+jobs:
+  consumers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repository: surumeneco/WhatAWonderfulChicken
+            shard: '00'
+          - repository: surumeneco/WhatAWonderfulChicken
+            shard: '01'
+          - repository: surumeneco/WhatAWonderfulWolf
+            shard: '00'
+          - repository: surumeneco/WhatAWonderfulWolf
+            shard: '01'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: WonderfulGenomeLib
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ matrix.repository }}
+          ref: feature/wgl-reprofile-${{ matrix.shard }}
+          path: Consumer
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.1.0'
+      - name: Consumer golden and allocation check
+        working-directory: Consumer
+        env:
+          GITHUB_REF_NAME: feature/genome-stats-${{ matrix.shard }}
+        run: gradle clean test --tests '*GenomeStatisticsProbeTest' --info --no-daemon
