@@ -237,6 +237,17 @@ public final class HomologyEngine {
         if (first != null && first != -1 && first != other) values.put(key, -1);
     }
 
+    /** Sparse postings backed by primitive positions: no Integer per 48-bit window. */
+    private static final class IntPositions {
+        int[] values = new int[4];
+        int size;
+
+        void add(int position) {
+            if (size == values.length) values = Arrays.copyOf(values, size * 2);
+            values[size++] = position;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static final class ChunkIndex {
         final Map<Integer,IntPositions>[] positions=new Map[]{new HashMap<>(),new HashMap<>(),new HashMap<>()};
