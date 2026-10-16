@@ -6,6 +6,21 @@
 - 既存の横断設計正本: Google Drive `forGPT/XPlayServer/OriginalPlugins/共通基盤/Genome非同期移行・実行負荷.md`
 - WGL性能検証: Google Drive `forGPT/XPlayServer/OriginalPlugins/WGL/開発・検証/06_性能最適化計画.md` と `07_性能・遺伝統計検証と対策.md`
 
+## 0. 未完了作業のみ（2026-10-16、PR・配布設定の現況照合）
+
+以下は**本方針で未完了**の事項。各項目は設計・実装・回帰検証・実VPS評価を一括完了とみなさず、段階を分ける。
+
+| 優先 | 所有者 | 残作業 | 完了判定 |
+| --- | --- | --- | --- |
+| P0-B | WGL | `MarkerEngine.findHits` の48bit窓比較・逆方向探索の割当/計算削減、密集anchorの厳密探索コスト測定 | 現行Marker Scheme V1との全量Golden一致、独立境界テスト、実処理CPU・割当比較 |
+| P0-A | WWC | cargo・装備・runtimeの保存から不変GenomeのMarker再計算を除外。Genome変更/欠損時だけ正規再導出 | `WonderfulChickenStore.save`・ClickMobs/旧個体復元・reloadの回帰、保存ごとのMarker呼出回数削減 |
+| P1 | WWC / WWW | runtime状態のみ更新する際のGenome/Snapshot再encode・外部ファイル照合を不要にし、既存参照を保持 | 更新/再起動/失敗時の旧参照維持・copy-on-write・チェックサム・原子的commitの回帰 |
+| P2 | WWC / WWW / サーバー | 通常時約1秒のラグと残存する定期走査、AI/特性、CoreProtect等の負荷をspark・TPS/MSPT・GC・I/Oで切り分け | 平常時・高負荷時の計測記録、原因別の採否、Watchdog再発検証 |
+
+**未完了のまま維持する共通検証**: WGL/consumerのGolden完全一致、WWC GUI/cargo/Founder/繁殖/管理/legacy/ClickMobs、WWW runtime/繁殖/復元、Paper実機でのwatchdog・p95/p99・TPS/MSPT・GC評価。詳細は第3節。実装済みと実機検証済みを混同しない。
+
+**関連する別計画（このラグ対策に混入しない）**: WWC Config外部化・旧互換設定整理（[Google Drive](https://drive.google.com/file/d/1neNKLqhF-TUBQ3l2X3TyfvrNBxefsjq9/view)）、WWWの10能力`stats.*`公開（[Google Drive](https://drive.google.com/file/d/1TcqJUvsTK-h0tLGjG8SePC9KJ3s7Hs9x/view)）は両者とも実装前分析。WGL PR #25後の再プロファイリング（[Google Drive](https://drive.google.com/file/d/1Dab0dPvC5ajAvZdMBsEtU4reW5F95eL_/view)）も別途未完了。
+
 ## 1. 観測と根拠
 
 2026-10-16のPaperログで、メインスレッドが長時間停止するWatchdog報告を確認。ダンプの実行経路は概ね以下。
@@ -73,3 +88,16 @@ WWC InventoryService.syncCargo
 - WWC/WWWのP1は保存スキーマの互換・復元契約を壊さない独立変更として扱う。
 - 変更は各リポジトリの`develop`起点`feature/*`でTDD/CIを通し、PR経由で統合する。正式リリースまでは`main`を更新しない。作業前にGoogle Driveの対応設計正本との整合を確認する。
 - 本文は設計・調査記録であり、コード修正・本番デプロイは未実施。
+
+## 5. 完了済みの関連変更（履歴・再実装不要）
+
+完了は**対象PRの統合・リリースというコード上の状態**を表す。今回のMarker/保存経路改善や実サーバーでのラグ解消を完了と認定したものではない。詳細な履歴や測定値は各PRと上記WGL 06/07に集約し、未完了表に再掲載しない。
+
+| 対象 | 既存の完了範囲 | 証跡 |
+| --- | --- | --- |
+| WGL | Homology系の既採用最適化（DP上界枝刈りまで）と1.0.0リリース | [PR #25](https://github.com/surumeneco/WonderfulGenomeLib/pull/25)、[PR #27](https://github.com/surumeneco/WonderfulGenomeLib/pull/27) |
+| WWC | 旧個体Genome非同期移行、Founder/繁殖の有界非同期化と外部不変Genome保存 | [PR #40](https://github.com/surumeneco/WhatAWonderfulChicken/pull/40)、[PR #41](https://github.com/surumeneco/WhatAWonderfulChicken/pull/41) |
+| WWC | WGL Markerによる血統表示、定期処理の増分・分散化、血統GUI統一、騎乗Skeleton AIへの操縦委譲、2.0.0リリース | [PR #43](https://github.com/surumeneco/WhatAWonderfulChicken/pull/43)、[PR #46](https://github.com/surumeneco/WhatAWonderfulChicken/pull/46)、[PR #48](https://github.com/surumeneco/WhatAWonderfulChicken/pull/48)、[PR #50](https://github.com/surumeneco/WhatAWonderfulChicken/pull/50)、[PR #52](https://github.com/surumeneco/WhatAWonderfulChicken/pull/52) |
+| WWW | Founder/繁殖の非同期処理と外部Genome保存、復元・初期状態修正、分散更新、唸り・攻撃速度・血統表示の修正、騎乗Evoker AIへの操縦委譲、1.0.0リリース | [PR #22](https://github.com/surumeneco/WhatAWonderfulWolf/pull/22)、[PR #23](https://github.com/surumeneco/WhatAWonderfulWolf/pull/23)、[PR #24](https://github.com/surumeneco/WhatAWonderfulWolf/pull/24)、[PR #27](https://github.com/surumeneco/WhatAWonderfulWolf/pull/27)、[PR #30](https://github.com/surumeneco/WhatAWonderfulWolf/pull/30)、[PR #31](https://github.com/surumeneco/WhatAWonderfulWolf/pull/31)、[PR #33](https://github.com/surumeneco/WhatAWonderfulWolf/pull/33)、[PR #35](https://github.com/surumeneco/WhatAWonderfulWolf/pull/35) |
+
+**区別**: 既存の「Genomeを外部ファイルに保存する仕組み」は統合済みだが、P1の「runtimeしか変わらない保存ではGenomeを再encodeしない」は未完了。既存の定期更新分散化も統合済みだが、P2の実測と残存ホットスポットの識別は未完了。
