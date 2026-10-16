@@ -1,25 +1,23 @@
 # WWC 2.0.0 / WWW 1.0.0 / WGL 1.0.0: メインスレッド停滞・Genome保存性能の最適化方針
 
 - 記録日: 2026-10-16
-- 状態: **調査で確認された経路に対する対策案。コード未変更・実機再測定未実施**
+- 状態: **P0/P1の修正はdevelopへ統合済み。実機再測定・P2は未完了**
 - 範囲: WhatAWonderfulChicken / WhatAWonderfulWolf / WonderfulGenomeLib
 - 既存の横断設計正本: Google Drive `forGPT/XPlayServer/OriginalPlugins/共通基盤/Genome非同期移行・実行負荷.md`
 - WGL性能検証: Google Drive `forGPT/XPlayServer/OriginalPlugins/WGL/開発・検証/06_性能最適化計画.md` と `07_性能・遺伝統計検証と対策.md`
 
-## 0. 未完了作業のみ（2026-10-16、PR・配布設定の現況照合）
+## 0. パッチ修正の実装状況（2026-10-16）
 
-以下は**本方針で未完了**の事項。各項目は設計・実装・回帰検証・実VPS評価を一括完了とみなさず、段階を分ける。
+以下の3リポジトリは指定パッチバージョンで修正し、CI成功後に `develop` へマージした。**ビルド成功と本番ラグ解消は別の判定**である。
 
-| 優先 | 所有者 | 残作業 | 完了判定 |
-| --- | --- | --- | --- |
-| P0-B | WGL | `MarkerEngine.findHits` の48bit窓比較・逆方向探索の割当/計算削減、密集anchorの厳密探索コスト測定 | 現行Marker Scheme V1との全量Golden一致、独立境界テスト、実処理CPU・割当比較 |
-| P0-A | WWC | cargo・装備・runtimeの保存から不変GenomeのMarker再計算を除外。Genome変更/欠損時だけ正規再導出 | `WonderfulChickenStore.save`・ClickMobs/旧個体復元・reloadの回帰、保存ごとのMarker呼出回数削減 |
-| P1 | WWC / WWW | runtime状態のみ更新する際のGenome/Snapshot再encode・外部ファイル照合を不要にし、既存参照を保持 | 更新/再起動/失敗時の旧参照維持・copy-on-write・チェックサム・原子的commitの回帰 |
-| P2 | WWC / WWW / サーバー | 通常時約1秒のラグと残存する定期走査、AI/特性、CoreProtect等の負荷をspark・TPS/MSPT・GC・I/Oで切り分け | 平常時・高負荷時の計測記録、原因別の採否、Watchdog再発検証 |
+| 項目 | 実装・CIの状態 | 残る検証 |
+| --- | --- | --- |
+| P0-B: WGL Marker V1 48bit探索 | **コード統合済み**: [WGL PR #30](https://github.com/surumeneco/WonderfulGenomeLib/pull/30)、1.0.1。rolling windowと反転bit比較を用い、旧scanとの全位置・Hamming・orientation一致をJUnitで確認 | 同一GenomeコホートでのCPU/割当量・p95/p99比較、密集anchorの厳密探索cost計測 |
+| P0-A: WWC Marker不要再導出抑制 | **コード統合済み**: [WWC PR #53](https://github.com/surumeneco/WhatAWonderfulChicken/pull/53)、2.0.1。entity・immutable Genome/Phenotype/Backbone・external ref・schemaを照合し、runtime変更のみではMarker再計算を省略 | Paper実機の保存呼出回数/CPU/割当、ClickMobs・旧個体・reload・繁殖の実機回帰 |
+| P1: WWC/WWW immutableファイル再エンコード削減 | **コード統合済み**: [WWC PR #53](https://github.com/surumeneco/WhatAWonderfulChicken/pull/53)、[WWW PR #36](https://github.com/surumeneco/WhatAWonderfulWolf/pull/36)。検証済みimmutable参照の同一性が保たれる場合に限り、binary再encodeとwriteOrReuseを省略。変更・miss・移行時は従来COW | 本番外部ファイルの破損/削除/再起動、失敗時の旧参照維持・CRC・原子的commit回帰 |
+| P2: 通常時の短いラグおよび他Plugin負荷の特定 | **未完了**。今回のコード修正だけで原因と断定しない | 本番・負荷時のspark / TPS / MSPT / GC / I/O実測、watchdogとp95/p99の再測定 |
 
-**未完了のまま維持する共通検証**: WGL/consumerのGolden完全一致、WWC GUI/cargo/Founder/繁殖/管理/legacy/ClickMobs、WWW runtime/繁殖/復元、Paper実機でのwatchdog・p95/p99・TPS/MSPT・GC評価。詳細は第3節。実装済みと実機検証済みを混同しない。
-
-**関連する別計画（このラグ対策に混入しない）**: WWC Config外部化・旧互換設定整理（[Google Drive](https://drive.google.com/file/d/1neNKLqhF-TUBQ3l2X3TyfvrNBxefsjq9/view)）、WWWの10能力`stats.*`公開（[Google Drive](https://drive.google.com/file/d/1TcqJUvsTK-h0tLGjG8SePC9KJ3s7Hs9x/view)）は両者とも実装前分析。WGL PR #25後の再プロファイリング（[Google Drive](https://drive.google.com/file/d/1Dab0dPvC5ajAvZdMBsEtU4reW5F95eL_/view)）も別途未完了。
+実装済みPRは `main` の正式リリース・本番JAR配布を意味しない。また、各プラグインのConfig外部化（WWC/WWW）は [別設計](https://drive.google.com/file/d/1neNKLqhF-TUBQ3l2X3TyfvrNBxefsjq9/view) に属し、本ラグ対策パッチへの混入を避ける。
 
 ## 1. 観測と根拠
 
