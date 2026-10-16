@@ -10,12 +10,12 @@
 | --- | --- |
 | Java | 25 |
 | Paper API | 26.2 build 129 stable |
-| WGL version | `0.1.0-SNAPSHOT` |
+| WGL version | `1.0.1` |
 | Gradle group | `co.surumene` |
 | Paper plugin name | `WonderfulGenomeLib` |
-| Consumer compile dependency | `co.surumene:wgl-plugin:0.1.0-SNAPSHOT` |
+| Consumer compile dependency | `co.surumene:wgl-plugin:1.0.1` |
 
-WGLは現在SNAPSHOT開発中のため、XPlayServer配下のconsumerではGradle Composite Buildを標準とします。正式なartifact repositoryへ公開された後は依存取得方法だけを差し替え、公開APIの利用方法は同じです。
+WGLの1.0.1版では、XPlayServer配下のconsumerではGradle Composite Buildを標準とします。正式なartifact repositoryへ公開された後は依存取得方法だけを差し替え、公開APIの利用方法は同じです。
 
 ## 2. 開発時の依存取得
 
@@ -44,16 +44,16 @@ consumerの `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    compileOnly("co.surumene:wgl-plugin:0.1.0-SNAPSHOT")
+    compileOnly("co.surumene:wgl-plugin:1.0.1")
 
-    testImplementation("co.surumene:wgl-plugin:0.1.0-SNAPSHOT")
+    testImplementation("co.surumene:wgl-plugin:1.0.1")
 }
 ```
 
 Profileやconsumer固有ロジックの単体テストでWGL core実装型を直接必要とする場合だけ、テストスコープに追加します。
 
 ```kotlin
-testImplementation("co.surumene:wgl-core:0.1.0-SNAPSHOT")
+testImplementation("co.surumene:wgl-core:1.0.1")
 ```
 
 production codeでは `co.surumene.wgl.core.*` へ直接依存せず、原則として `co.surumene.wgl.api.*` と `WonderfulGenomeLibService` を入口にします。
