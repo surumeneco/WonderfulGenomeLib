@@ -33,8 +33,28 @@ public final class MarkerEngine implements MarkerScheme {
         BitSequence x=seq.slice(best.a.position,best.a.position+48),y=seq.slice(best.b.position,best.b.position+48);if(best.a.reverse){x=x.reverse();y=y.reverse();}
         return x.concat(y);
     }
-    private List<Hit> findHits(BitSequence seq,BitSequence anchor){List<Hit> out=new ArrayList<>();if(seq.bitLength()<48)return out;for(int i=0;i<=seq.bitLength()-48;i++){BitSequence w=seq.slice(i,i+48);int f=w.hammingDistance(anchor);if(f<=2)out.add(new Hit(i,false,f));int r=w.reverse().hammingDistance(anchor);if(r<=2)out.add(new Hit(i,true,r));}return out;}
+    /**
+     * Scan every V1 48-bit start position without allocating a slice/reverse per window.
+     * Results retain the original position order and forward-before-reverse tie order.
+     */
+    static List<Hit> findHits(BitSequence seq, BitSequence anchor) {
+        List<Hit> hits = new ArrayList<>();
+        if (seq.bitLength() < 48) return hits;
+        final long mask = (1L << 48) - 1;
+        final long target = anchor.toLong(0, 48);
+        long window = seq.toLong(0, 48);
+        for (int position = 0, end = seq.bitLength() - 48; position <= end; position++) {
+            int forward = Long.bitCount(window ^ target);
+            if (forward <= 2) hits.add(new Hit(position, false, forward));
+            int reverse = Long.bitCount((Long.reverse(window) >>> 16) ^ target);
+            if (reverse <= 2) hits.add(new Hit(position, true, reverse));
+            if (position < end) {
+                window = ((window << 1) & mask) | (seq.bitAt(position + 48) ? 1L : 0L);
+            }
+        }
+        return hits;
+    }
     private static int digestNibble(byte[] data){try{byte[] d=MessageDigest.getInstance("SHA-256").digest(data);return (d[0]>>>4)&0xF;}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
-    private record Hit(int position,boolean reverse,int hamming){}
+    static record Hit(int position,boolean reverse,int hamming){}
     private record Pair(Hit a,Hit b,int hamming,int gapError,int position) implements Comparable<Pair>{public int compareTo(Pair o){int c=Integer.compare(hamming,o.hamming);if(c!=0)return c;c=Integer.compare(gapError,o.gapError);if(c!=0)return c;return Integer.compare(position,o.position);}}
 }
